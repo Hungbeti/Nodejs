@@ -120,19 +120,15 @@ const Navbar = () => {
               </Link>
             </li>
 
-            {/* ADMIN LINK */}
-            {isAdmin && (
-              <li className="nav-item">
-                <Link className="nav-link text-white px-3" to="/admin">
-                  <i className="bi bi-speedometer2 fs-5"></i>
-                  <span className="d-none d-lg-inline ms-1">Admin</span>
-                </Link>
-              </li>
-            )}
-
             {/* PROFILE / ĐĂNG NHẬP */}
             {isLoggedIn ? (
               <>
+                <li className="nav-item">
+                  <Link className="nav-link text-white px-3" to="/my-orders">
+                    <i className="bi bi-box-seam fs-5"></i>
+                    <span className="d-none d-lg-inline ms-1">Đơn hàng</span>
+                  </Link>
+                </li>
                 <li className="nav-item">
                   <Link className="nav-link text-white px-3" to="/profile">
                     <i className="bi bi-person-circle fs-5"></i>

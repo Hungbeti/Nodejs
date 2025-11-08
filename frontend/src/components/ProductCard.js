@@ -1,12 +1,21 @@
 //src/components/ProductCard.js
 import React from 'react';
-import api from '../services/api';
+// KHÔNG cần 'api' nữa, import 'useCart'
+import { useCart } from '../context/CartContext';
 
 const ProductCard = ({ product }) => {
-  const addToCart = () => {
-    api.post('/cart/add', { productId: product._id, quantity: 1 })
-      .then(() => alert('Thêm vào giỏ thành công!'))
-      .catch(() => alert('Không thể thêm vào giỏ'));
+  // Lấy hàm addToCart "thông minh" từ Context
+  const { addToCart } = useCart();
+
+  const handleAddToCart = async () => {
+    try {
+      // Chỉ cần gọi hàm này, nó sẽ tự xử lý mọi thứ
+      await addToCart(product, 1);
+      alert('Thêm vào giỏ thành công!');
+    } catch (err) {
+      // Lỗi này sẽ bao gồm cả lỗi API (nếu đã đăng nhập)
+      alert('Không thể thêm vào giỏ: ' + (err.response?.data?.msg || err.message));
+    }
   };
 
   return (
@@ -23,7 +32,8 @@ const ProductCard = ({ product }) => {
           {Number(product.price).toLocaleString('vi-VN')} ₫
         </p>
         <div className="mt-auto d-flex justify-content-between">
-          <button onClick={addToCart} className="btn btn-outline-primary btn-sm">
+          {/* Nút "Thêm" bây giờ gọi hàm handleAddToCart */}
+          <button onClick={handleAddToCart} className="btn btn-outline-primary btn-sm">
             <i className="bi bi-cart-plus"></i> Thêm
           </button>
           <button className="btn btn-success btn-sm">Mua ngay</button>

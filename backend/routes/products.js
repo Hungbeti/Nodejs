@@ -95,7 +95,14 @@ router.get('/', async (req, res) => {
 router.post('/', protect, admin, async (req, res) => {
   try {
     const { name, price, images, description, stock, category, brand } = req.body;
-
+    // === THÊM KIỂM TRA TRÙNG TÊN (Case-insensitive) ===
+    const existingProduct = await Product.findOne({ 
+      name: { $regex: `^${name}$`, $options: 'i' } 
+    });
+    
+    if (existingProduct) {
+      return res.status(400).json({ msg: 'Tên sản phẩm này đã tồn tại' });
+    }
     // Kiểm tra category tồn tại
     if (category) {
       const cat = await Category.findById(category);

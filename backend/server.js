@@ -7,7 +7,6 @@ const http = require('http');
 const { Server } = require('socket.io');
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
-const FacebookStrategy = require('passport-facebook').Strategy;
 
 // Routes
 const authRoutes = require('./routes/auth');
@@ -18,6 +17,7 @@ const cartRoutes = require('./routes/cart');
 const couponRoutes = require('./routes/coupons');
 const categoryRoutes = require('./routes/categories');
 const brandRoutes = require('./routes/brands');
+const userRoutes = require('./routes/userRoutes');
 
 // Models
 const User = require('./models/User');
@@ -43,20 +43,6 @@ passport.use(new GoogleStrategy({
   done(null, user);
 }));
 
-passport.use(new FacebookStrategy({
-  clientID: process.env.FB_APP_ID,
-  clientSecret: process.env.FB_APP_SECRET,
-  callbackURL: '/api/auth/facebook/callback',
-  profileFields: ['id', 'emails', 'name']
-}, async (accessToken, refreshToken, profile, done) => {
-  let user = await User.findOne({ email: profile.emails[0].value });
-  if (!user) {
-    user = new User({ email: profile.emails[0].value, name: `${profile.name.givenName} ${profile.name.familyName}` });
-    await user.save();
-  }
-  done(null, user);
-}));
-
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
@@ -66,6 +52,7 @@ app.use('/api/cart', cartRoutes);
 app.use('/api/coupons', couponRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/brands', brandRoutes);
+app.use('/api', userRoutes);
 
 // Socket.io
 const server = http.createServer(app);

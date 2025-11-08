@@ -71,12 +71,10 @@ const getAdvancedDashboard = async (req, res) => {
 
 // Quản lý người dùng
 const getUsers = async (req, res) => {
-  const page = parseInt(req.query.page) || 1;
-  const limit = 20;
   try {
-    const users = await User.find().select('-password').skip((page - 1) * limit).limit(limit);
-    const total = await User.countDocuments();
-    res.json({ users, totalPages: Math.ceil(total / limit), currentPage: page });
+    const users = await User.find().select('-password')
+    res.json({ users });
+    
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -91,10 +89,13 @@ const updateUser = async (req, res) => {
   }
 };
 
-const banUser = async (req, res) => {
+// ĐÃ ĐỔI TÊN VÀ CẬP NHẬT LOGIC
+const toggleUserBan = async (req, res) => {
   try {
-    await User.findByIdAndUpdate(req.params.id, { isBanned: true });
-    res.json({ message: 'User banned' });
+    // Cập nhật trạng thái isActive được gửi từ frontend
+    const { isActive } = req.body; 
+    await User.findByIdAndUpdate(req.params.id, { isActive: isActive });
+    res.json({ message: 'Cập nhật thành công' });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -154,7 +155,7 @@ module.exports = {
   getAdvancedDashboard,
   getUsers,
   updateUser,
-  banUser,
+  toggleUserBan,
   getCoupons,
   createCoupon,
   deleteCoupon,
