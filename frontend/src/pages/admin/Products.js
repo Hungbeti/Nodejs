@@ -9,6 +9,7 @@ const AdminProducts = () => {
   const [brands, setBrands] = useState([]);
   const [tab, setTab] = useState('products'); // products | categories | brands
 
+  // State cho việc chỉnh sửa
   const [editingProduct, setEditingProduct] = useState(null);
   const [editingCategory, setEditingCategory] = useState(null);
   const [editingBrand, setEditingBrand] = useState(null);
@@ -82,6 +83,17 @@ const AdminProducts = () => {
   const fetchCategoriesForForm = () => {
      api.get('/categories').then(res => setCategories(res.data.categories || []));
   };
+  
+  // Tải Categories (1 lần) để dùng cho các bộ lọc
+  useEffect(() => {
+    //fetchCategories(); // Tải cho bộ lọc
+    api.get('/categories').then(res => setCategories(res.data.categories || []));
+  }, []); // Chỉ chạy 1 lần lúc đầu
+
+  // Tải lại danh sách khi các bộ lọc/tìm kiếm/tab thay đổi
+  useEffect(() => {
+    if (tab === 'products') fetchProducts();
+  }, [tab, productSearch, productCategoryFilter, productPage]);
 
   useEffect(() => {
     fetchCategoriesForForm();
