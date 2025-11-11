@@ -2,12 +2,22 @@
 const express = require('express');
 const router = express.Router();
 const {
+  getCoupons,
+  createCoupon,
+  deleteCoupon,
   validateCoupon,
-  applyCoupon
+  getAvailableCoupons
 } = require('../controllers/couponController');
+const { protect, admin } = require('../middleware/auth');
 
-// === PUBLIC ===
-router.get('/validate/:code', validateCoupon);   // Kiểm tra hợp lệ + số lần dùng
-router.post('/apply', applyCoupon);             // Áp dụng khi checkout
+// PUBLIC
+// Dùng POST thay vì GET để gửi kèm orderTotal một cách an toàn và chuẩn hơn
+router.get('/available', getAvailableCoupons);
+router.post('/validate', validateCoupon); 
+
+// ADMIN ONLY
+router.get('/', protect, admin, getCoupons);
+router.post('/', protect, admin, createCoupon);
+router.delete('/:id', protect, admin, deleteCoupon);
 
 module.exports = router;

@@ -9,6 +9,9 @@ const Register = () => {
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
+  // URL API cho Google Auth (Giả sử backend chạy trên port 5000)
+  const googleAuthUrl = (api.defaults.baseURL || 'http://localhost:5000/api') + '/auth/google';
+
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
@@ -57,9 +60,10 @@ const Register = () => {
               </form>
 
               <div className="text-center mt-3">
-                <button className="btn btn-danger w-100">
-                  Tiếp tục với Google
-                </button>
+                {/* Đã đổi thành thẻ <a> để gọi API */}
+                <a href={googleAuthUrl} className="btn btn-danger w-100">
+                  Đăng ký bằng Google
+                </a>
               </div>
 
               <div className="text-center mt-3">

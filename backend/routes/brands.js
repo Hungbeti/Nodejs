@@ -8,19 +8,24 @@ const { protect, admin } = require('../middleware/auth');
 // LẤY TẤT CẢ THƯƠNG HIỆU (HOẶC THEO CATEGORY)
 router.get('/', async (req, res) => {
   try {
-    const { category } = req.query;
+    const { category, search } = req.query; // Thêm 'search'
     const filter = {};
 
     if (category) {
-  // Nếu là ObjectId hợp lệ thì tìm theo ID
+      // (Logic lọc category giữ nguyên)
       let cat = null;
       if (category.match(/^[0-9a-fA-F]{24}$/)) {
         cat = await Category.findById(category);
       } else {
         cat = await Category.findOne({ name: { $regex: `^${category}$`, $options: 'i' } });
       }
-      if (!cat) return res.status(404).json({ msg: 'Danh mục không tồn tại' });
-      filter.category = cat._id;
+      if (cat) {
+        filter.category = cat._id;
+      }
+    }
+
+    if (search) {
+      filter.name = { $regex: search, $options: 'i' };
     }
 
     const brands = await Brand.find(filter)
@@ -38,24 +43,18 @@ router.get('/', async (req, res) => {
 router.post('/', protect, admin, async (req, res) => {
   try {
     const { name, category } = req.body;
-
-    if (!name || !category) {
-      return res.status(400).json({ msg: 'Tên và danh mục là bắt buộc' });
-    }
-
-    // KIỂM TRA DANH MỤC TỒN TẠI
+    if (!name || !category) return res.status(400).json({ msg: 'Tên và danh mục là bắt buộc' });
     const cat = await Category.findById(category);
     if (!cat) return res.status(400).json({ msg: 'Danh mục không tồn tại' });
 
-    // KIỂM TRA TÊN TRÙNG
-    const existing = await Brand.findOne({ name: name.trim(), category });
+    // Sửa: Kiểm tra trùng không phân biệt hoa/thường
+    const existing = await Brand.findOne({ 
+      name: { $regex: `^${name.trim()}$`, $options: 'i' }, 
+      category 
+    });
     if (existing) return res.status(400).json({ msg: 'Thương hiệu đã tồn tại trong danh mục này' });
 
-    const brand = await Brand.create({
-      name: name.trim(),
-      category
-    });
-
+    const brand = await Brand.create({ name: name.trim(), category });
     const populated = await Brand.findById(brand._id).populate('category', 'name');
     res.status(201).json(populated);
   } catch (err) {
@@ -69,18 +68,13 @@ router.put('/:id', protect, admin, async (req, res) => {
   try {
     const { name, category } = req.body;
     const brandId = req.params.id;
-
-    if (!name || !category) {
-      return res.status(400).json({ msg: 'Tên và danh mục là bắt buộc' });
-    }
-
-    // KIỂM TRA DANH MỤC
+    if (!name || !category) return res.status(400).json({ msg: 'Tên và danh mục là bắt buộc' });
     const cat = await Category.findById(category);
     if (!cat) return res.status(400).json({ msg: 'Danh mục không tồn tại' });
 
-    // KIỂM TRA TRÙNG (TRỪ BẢN THÂN)
+    // Sửa: Kiểm tra trùng không phân biệt hoa/thường
     const existing = await Brand.findOne({
-      name: name.trim(),
+      name: { $regex: `^${name.trim()}$`, $options: 'i' },
       category,
       _id: { $ne: brandId }
     });
@@ -93,7 +87,6 @@ router.put('/:id', protect, admin, async (req, res) => {
     ).populate('category', 'name');
 
     if (!updated) return res.status(404).json({ msg: 'Không tìm thấy thương hiệu' });
-
     res.json(updated);
   } catch (err) {
     console.error('Lỗi PUT /brands:', err);

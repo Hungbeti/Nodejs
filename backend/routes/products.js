@@ -6,7 +6,7 @@ const Category = require('../models/Category');
 const Brand = require('../models/Brand');
 const { protect, admin } = require('../middleware/auth');
 
-// GET tất cả sản phẩm
+// GET tất cả sản phẩm (Đã sửa lỗi lọc và thêm sort)
 router.get('/', async (req, res) => {
   try {
     const {
@@ -16,73 +16,74 @@ router.get('/', async (req, res) => {
       minPrice,
       maxPrice,
       sort,
-      page = 1
+      page = 1,
+      limit = 12 // Thêm limit có thể tùy chỉnh
     } = req.query;
 
-    const limit = 12;
     const skip = (page - 1) * limit;
     const query = {};
+    let categoryId = null; 
 
-    // Tìm kiếm tên
     if (search) {
       query.name = { $regex: search, $options: 'i' };
     }
 
-    // Lọc theo danh mục (dùng tên)
     if (categoryName) {
       let cat = null;
-  
-      // Nếu categoryName là ObjectId hợp lệ => tìm theo ID
       if (categoryName.match(/^[0-9a-fA-F]{24}$/)) {
         cat = await Category.findById(categoryName);
       } else {
-        // Nếu không thì tìm theo tên (so khớp chính xác, không dùng regex mở rộng)
-        cat = await Category.findOne({ name: categoryName.trim() });
+        cat = await Category.findOne({ name: { $regex: `^${categoryName.trim()}$`, $options: 'i' } });
       }
-
+      
       if (!cat) return res.json({ products: [], totalPages: 0, currentPage: 1 });
       query.category = cat._id;
+      categoryId = cat._id;
     }
 
-    // Lọc theo thương hiệu
     if (brandName) {
-      const b = await Brand.findOne({
+      const brandQuery = {
         name: { $regex: `^${brandName}$`, $options: 'i' }
-      });
+      };
+      if (categoryId) {
+        brandQuery.category = categoryId;
+      }
+      const b = await Brand.findOne(brandQuery);
       if (!b) {
         return res.json({ products: [], totalPages: 0, currentPage: 1 });
       }
       query.brand = b._id;
     }
 
-    // Lọc giá
     if (minPrice || maxPrice) {
       query.price = {};
       if (minPrice) query.price.$gte = Number(minPrice);
       if (maxPrice) query.price.$lte = Number(maxPrice);
     }
 
-    // Sắp xếp
+    // === CẬP NHẬT SORT OPTIONS ===
     const sortOption = {
       nameAsc: { name: 1 },
       nameDesc: { name: -1 },
       priceAsc: { price: 1 },
-      priceDesc: { price: -1 }
-    }[sort] || {};
-
-    // Lấy sản phẩm + populate với điều kiện match
+      priceDesc: { price: -1 },
+      soldDesc: { sold: -1 },     // Hỗ trợ "Bán chạy nhất"
+      newest: { createdAt: -1 }   // Hỗ trợ "Sản phẩm mới"
+    }[sort] || { createdAt: -1 }; // Mặc định là mới nhất
+    // ===========================
+    
     const products = await Product.find(query)
       .populate('category', 'name')
       .populate('brand', 'name')
       .sort(sortOption)
       .skip(skip)
-      .limit(limit);
+      .limit(Number(limit));
 
     const total = await Product.countDocuments(query);
 
     res.json({
       products: products,
-      totalPages: Math.ceil(total / limit),
+      totalPages: Math.ceil(total / Number(limit)),
       currentPage: Number(page)
     });
   } catch (err) {
@@ -91,18 +92,79 @@ router.get('/', async (req, res) => {
   }
 });
 
+// === THÊM ROUTE MỚI CHO TRANG CHI TIẾT ===
+router.get('/:id', async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id)
+      .populate('category', 'name')
+      .populate('brand', 'name')
+      .populate('reviews.user', 'name'); // Lấy tên người review
+
+    if (!product) {
+      return res.status(404).json({ msg: 'Không tìm thấy sản phẩm' });
+    }
+    res.json(product);
+  } catch (err) {
+    console.error('Lỗi GET /products/:id:', err);
+    res.status(500).json({ msg: 'Lỗi server' });
+  }
+});
+
+// === THÊM ROUTE MỚI ĐỂ REVIEW SẢN PHẨM ===
+router.post('/:id/reviews', protect, async (req, res) => {
+  try {
+    const { rating, comment } = req.body;
+    
+    // 1. Kiểm tra đầu vào
+    if (!rating || !comment || comment.trim() === '') {
+      return res.status(400).json({ msg: 'Vui lòng cung cấp cả sao và bình luận.' });
+    }
+
+    const product = await Product.findById(req.params.id);
+    if (!product) return res.status(404).json({ msg: 'Không tìm thấy sản phẩm' });
+
+    // (Logic kiểm tra đã mua hàng)
+
+    const review = {
+      user: req.user._id,
+      name: req.user.name,
+      rating: Number(rating),
+      comment,
+    };
+
+    // 2. SỬA LỖI: Khởi tạo mảng nếu nó không tồn tại
+    if (!product.reviews) {
+      product.reviews = [];
+    }
+    // ===========================================
+
+    product.reviews.push(review);
+    
+    await product.save();
+    res.status(201).json({ msg: 'Đã thêm đánh giá' });
+    
+  } catch (err) {
+    // Thêm log chi tiết
+    console.error('Lỗi POST /:id/reviews:', err); 
+    res.status(500).json({ msg: 'Lỗi server' });
+  }
+});
+
 // THÊM sản phẩm (admin)
 router.post('/', protect, admin, async (req, res) => {
   try {
     const { name, price, images, description, stock, category, brand } = req.body;
-
-    // Kiểm tra category tồn tại
+    const existingProduct = await Product.findOne({ 
+      name: { $regex: `^${name}$`, $options: 'i' } 
+    });
+    
+    if (existingProduct) {
+      return res.status(400).json({ msg: 'Tên sản phẩm này đã tồn tại' });
+    }
     if (category) {
       const cat = await Category.findById(category);
       if (!cat) return res.status(400).json({ msg: 'Danh mục không tồn tại' });
     }
-
-    // Kiểm tra brand tồn tại
     if (brand) {
       const b = await Brand.findById(brand);
       if (!b) return res.status(400).json({ msg: 'Thương hiệu không tồn tại' });
@@ -131,7 +193,6 @@ router.put('/:id', protect, admin, async (req, res) => {
       const cat = await Category.findById(category);
       if (!cat) return res.status(400).json({ msg: 'Danh mục không tồn tại' });
     }
-
     if (brand) {
       const b = await Brand.findById(brand);
       if (!b) return res.status(400).json({ msg: 'Thương hiệu không tồn tại' });
@@ -156,7 +217,7 @@ router.put('/:id', protect, admin, async (req, res) => {
 router.delete('/:id', protect, admin, async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
-    if (!product) return res.status(404).json({ msg: 'Không tìm thấy sản phẩm' });
+    if (!product) return res.status(4404).json({ msg: 'Không tìm thấy sản phẩm' });
 
     await Product.findByIdAndDelete(req.params.id);
     res.json({ msg: 'Đã xóa sản phẩm' });

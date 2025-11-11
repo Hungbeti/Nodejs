@@ -11,42 +11,42 @@ const Home = () => {
   const [hardDrives, setHardDrives] = useState([]);
 
   useEffect(() => {
-    api.get('/products?sort=createdAtDesc&limit=5').then(res => setNewProducts(res.data.products));
-    api.get('/products?sort=soldDesc&limit=5').then(res => setBestSellers(res.data.products));
-    api.get('/products?category=laptop&limit=5').then(res => setLaptops(res.data.products));
-    api.get('/products?category=monitor&limit=5').then(res => setMonitors(res.data.products));
-    api.get('/products?category=harddrive&limit=5').then(res => setHardDrives(res.data.products));
+    // Sửa: sort=newest (theo backend)
+    api.get('/products?sort=newest&limit=5').then(res => setNewProducts(res.data.products || []));
+    // Sửa: sort=soldDesc (theo backend)
+    api.get('/products?sort=soldDesc&limit=5').then(res => setBestSellers(res.data.products || []));
+    
+    // Sửa: Dùng tên category chuẩn (giả sử là "Laptop", "Màn Hình")
+    api.get('/products?category=Laptop&limit=5').then(res => setLaptops(res.data.products || []));
+    api.get('/products?category=Màn Hình&limit=5').then(res => setMonitors(res.data.products || []));
+    api.get('/products?category=Ổ cứng&limit=5').then(res => setHardDrives(res.data.products || []));
   }, []);
 
-  return (
-    <div>
-      <h2>Sản Phẩm Mới</h2>
-      <div className="row">
-        {newProducts.map(p => <div className="col-md-2 mb-3" key={p._id}><ProductCard product={p} /></div>)}
-      </div>
-
-      <h2>Bán Chạy Nhất</h2>
-      <div className="row">
-        {bestSellers.map(p => <div className="col-md-2 mb-3" key={p._id}><ProductCard product={p} /></div>)}
-      </div>
-
-      <h2>Laptop</h2>
-      <div className="row">
-        {laptops.map(p => <div className="col-md-2 mb-3" key={p._id}><ProductCard product={p} /></div>)}
-      </div>
-
-      <h2>Màn Hình</h2>
-      <div className="row">
-        {monitors.map(p => <div className="col-md-2 mb-3" key={p._id}><ProductCard product={p} /></div>)}
-      </div>
-
-      <h2>Ổ Cứng</h2>
-      <div className="row">
-        {hardDrives.map(p => <div className="col-md-2 mb-3" key={p._id}><ProductCard product={p} /></div>)}
-      </div>
+  const renderSection = (title, products) => (
+    <div className="mb-5">
+      <h2 className="mb-3">{title}</h2>
+      {products.length > 0 ? (
+        <div className="row row-cols-2 row-cols-md-4 row-cols-lg-6 g-3">
+          {products.map(p => (
+            <div className="col" key={p._id}>
+              <ProductCard product={p} />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-muted">Đang tải...</p>
+      )}
     </div>
-    
-    
+  );
+
+  return (
+    <div className="container my-4">
+      {renderSection('Sản Phẩm Mới', newProducts)}
+      {renderSection('Bán Chạy Nhất', bestSellers)}
+      {renderSection('Laptop', laptops)}
+      {renderSection('Màn Hình', monitors)}
+      {renderSection('Ổ Cứng', hardDrives)}
+    </div>
   );
 };
 

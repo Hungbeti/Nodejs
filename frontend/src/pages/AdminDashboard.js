@@ -7,6 +7,9 @@ import {
 import NavbarAdmin from '../components/NavbarAdmin';
 import api from '../services/api';
 import AdminProducts from './admin/Products';
+import Users from './admin/Users';
+import Orders from './admin/Orders';
+import Coupons from './admin/Coupons';
 
 const AdminDashboard = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -250,77 +253,14 @@ const AdminDashboard = () => {
             } />
 
             {/* CÁC TRANG CON */}
+            {/* Quản lý sản phẩm */}
             <Route path="products/*" element={<AdminProducts />} />
-
-            <Route path="users" element={
-              <div className="p-4">
-                <h3>Quản lý người dùng</h3>
-                <div className="table-responsive">
-                  <table className="table">
-                    <thead><tr><th>ID</th><th>Email</th><th>Tên</th><th>Trạng thái</th><th>Hành động</th></tr></thead>
-                    <tbody>
-                      <tr>
-                        <td>1</td>
-                        <td>user@example.com</td>
-                        <td>Nguyễn Văn A</td>
-                        <td><span className="badge bg-success">Hoạt động</span></td>
-                        <td><button className="btn btn-sm btn-danger">Cấm</button></td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            } />
-
-            <Route path="orders" element={
-              <div className="p-4">
-                <h3>Quản lý đơn hàng</h3>
-                <div className="d-flex gap-2 mb-3">
-                  <select className="form-select form-select-sm w-auto">
-                    <option>Hôm nay</option>
-                    <option>Tuần này</option>
-                    <option>Tháng này</option>
-                  </select>
-                  <button className="btn btn-outline-secondary btn-sm">Lọc</button>
-                </div>
-                <div className="table-responsive">
-                  <table className="table">
-                    <thead><tr><th>Mã</th><th>Khách</th><th>Ngày</th><th>Tổng</th><th>Trạng thái</th><th></th></tr></thead>
-                    <tbody>
-                      <tr>
-                        <td>#1001</td>
-                        <td>user@example.com</td>
-                        <td>29/10/2025</td>
-                        <td>15,990,000</td>
-                        <td><span className="badge bg-warning">Đang xử lý</span></td>
-                        <td><button className="btn btn-sm btn-primary">Xem</button></td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            } />
-
-            <Route path="coupons" element={
-              <div className="p-4">
-                <h3>Quản lý mã giảm giá</h3>
-                <button className="btn btn-success mb-3">+ Tạo mã mới</button>
-                <div className="table-responsive">
-                  <table className="table">
-                    <thead><tr><th>Mã</th><th>Giá trị</th><th>Đã dùng</th><th>Giới hạn</th><th>Ngày tạo</th></tr></thead>
-                    <tbody>
-                      <tr>
-                        <td>SALE20</td>
-                        <td>20%</td>
-                        <td>45</td>
-                        <td>100</td>
-                        <td>01/10/2025</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            } />
+            {/* Quản lý người dùng */}  
+            <Route path="users" element={<Users />} />
+            {/* Quản lý đơn hàng */}
+            <Route path="orders" element={<Orders />} />
+            {/* Quản lý mã giảm giá */}
+            <Route path="coupons" element={<Coupons />} />
           </Routes>
         </div>
         </div>

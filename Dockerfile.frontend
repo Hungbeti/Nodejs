@@ -1,3 +1,4 @@
+# Dockerfile.frontend
 FROM node:18
 WORKDIR /app/frontend
 COPY frontend/package*.json ./

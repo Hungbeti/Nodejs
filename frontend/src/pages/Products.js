@@ -4,19 +4,32 @@ import { useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import ProductCard from '../components/ProductCard';
 
+// === HÀM HELPER MỚI: ĐỊNH DẠNG SỐ ===
+const formatPriceInput = (value) => {
+  // 1. Xóa mọi ký tự không phải số
+  const numString = value.replace(/[^0-9]/g, '');
+  if (!numString) return '';
+  // 2. Định dạng lại
+  return Number(numString).toLocaleString('vi-VN');
+};
+
+const parsePriceInput = (value) => {
+  // Xóa dấu .
+  return value.replace(/\./g, ''); 
+};
+// ===================================
+
 const Products = () => {
-  // DÙNG useSearchParams ĐỂ ĐỌC & CẬP NHẬT URL
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [products, setProducts] = useState([]);
   const [brands, setBrands] = useState([]);
-  const [categories, setCategories] = useState([]); // DÙNG ĐỂ HIỂN THỊ TÊN DANH MỤC
+  // const [categories, setCategories] = useState([]); // Không cần state này nữa
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [sort, setSort] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // ĐỌC FILTER TỪ URL
   const getFilter = (key, defaultValue = '') => searchParams.get(key) || defaultValue;
 
   const filters = {
@@ -27,14 +40,19 @@ const Products = () => {
     search: getFilter('search'),
   };
 
-  // CẬP NHẬT URL KHI FILTER THAY ĐỔI
+  // State cho input giá (để hiển thị định dạng)
+  const [priceInput, setPriceInput] = useState({
+    min: formatPriceInput(filters.minPrice),
+    max: formatPriceInput(filters.maxPrice)
+  });
+
   const updateUrl = (newFilters) => {
     const params = new URLSearchParams(searchParams);
     Object.entries(newFilters).forEach(([k, v]) => {
       if (v) params.set(k, v);
       else params.delete(k);
     });
-    params.set('page', '1'); // Reset page
+    params.set('page', '1');
     setSearchParams(params);
   };
 
@@ -43,23 +61,32 @@ const Products = () => {
     updateUrl({ ...filters, [name]: value });
   };
 
+  // === SỬA LỖI ĐỊNH DẠNG GIÁ ===
+  const handlePriceChange = (e) => {
+    const { name, value } = e.target;
+    // Cập nhật giá trị hiển thị (có dấu .)
+    setPriceInput(prev => ({ ...prev, [name]: formatPriceInput(value) }));
+  };
+
+  const handlePriceBlur = (e) => {
+    // Khi người dùng bấm ra ngoài, cập nhật URL
+    const { name } = e.target;
+    const rawValue = parsePriceInput(priceInput[name]); // Lấy giá trị số
+    
+    // Chỉ cập nhật URL nếu giá trị thay đổi
+    if (rawValue !== filters[name === 'min' ? 'minPrice' : 'maxPrice']) {
+      updateUrl({ ...filters, [name === 'min' ? 'minPrice' : 'maxPrice']: rawValue });
+    }
+  };
+  // ===============================
+  
   const handleSortChange = (e) => {
     setSort(e.target.value);
+    // Sửa: Phải gọi updateUrl để cập nhật 'sort'
     updateUrl({ ...filters, sort: e.target.value });
   };
 
-  // TẢI DANH MỤC (để hiển thị tên)
-  useEffect(() => {
-    const fetchCategories = async () => {
-      try {
-        const { data } = await api.get('/categories');
-        setCategories(data.categories || []);
-      } catch (err) {
-        console.error('Lỗi tải danh mục:', err);
-      }
-    };
-    fetchCategories();
-  }, []);
+  // Bỏ useEffect tải categories
 
   // TẢI THƯƠNG HIỆU THEO DANH MỤC
   useEffect(() => {
@@ -69,6 +96,7 @@ const Products = () => {
         return;
       }
       try {
+        // Backend /brands chấp nhận TÊN danh mục
         const { data } = await api.get(`/brands?category=${filters.category}`);
         setBrands(data.brands || []);
       } catch (err) {
@@ -83,14 +111,14 @@ const Products = () => {
   useEffect(() => {
     const fetchProducts = async () => {
       setLoading(true);
-      const query = new URLSearchParams({
-        page,
-        sort,
-        ...filters,
-      }).toString();
+      // Lấy query từ URL (searchParams)
+      const query = new URLSearchParams(searchParams);
+      // Thêm page và sort (vì chúng là state, không phải URL)
+      query.set('page', page);
+      if(sort) query.set('sort', sort);
 
       try {
-        const { data } = await api.get(`/products?${query}`);
+        const { data } = await api.get(`/products?${query.toString()}`);
         setProducts(data.products || []);
         setTotalPages(data.totalPages || 1);
       } catch (err) {
@@ -102,10 +130,19 @@ const Products = () => {
     };
 
     fetchProducts();
-  }, [page, sort, searchParams]); // PHỤ THUỘC VÀO searchParams → LUÔN CẬP NHẬT KHI URL THAY ĐỔI
+    // Cập nhật lại state của input giá nếu URL thay đổi (ví dụ: bấm nút back)
+    setPriceInput({
+      min: formatPriceInput(filters.minPrice),
+      max: formatPriceInput(filters.maxPrice)
+    });
+    setSort(getFilter('sort')); // Cập nhật state sort
 
-  // LẤY TÊN DANH MỤC
-  const currentCategoryName = categories.find(c => c._id === filters.category)?.name || 'Tất cả sản phẩm';
+  }, [page, searchParams]); // Bỏ 'sort', chỉ phụ thuộc vào 'page' và 'searchParams'
+
+  // === SỬA LỖI TIÊU ĐỀ ===
+  // Lấy tên danh mục trực tiếp từ URL (filters.category)
+  const currentCategoryName = filters.category || 'Tất cả sản phẩm';
+  // ======================
 
   return (
     <div className="container my-4">
@@ -122,7 +159,11 @@ const Products = () => {
             >
               <option value="">Tất cả</option>
               {brands.map(b => (
-                <option key={b._id} value={b._id}>{b.name}</option>
+                // === SỬA LỖI LỌC THƯƠNG HIỆU ===
+                // Gửi TÊN thương hiệu (b.name) thay vì ID (b._id)
+                // để khớp với backend
+                <option key={b._id} value={b.name}>{b.name}</option>
+                // ==============================
               ))}
             </select>
 
@@ -130,19 +171,21 @@ const Products = () => {
             <div className="mb-2">
               <input
                 className="form-control"
-                name="minPrice"
+                name="min"
                 placeholder="Từ"
-                value={filters.minPrice}
-                onChange={handleFilterChange}
+                value={priceInput.min} // Dùng state hiển thị
+                onChange={handlePriceChange} // Dùng hàm định dạng
+                onBlur={handlePriceBlur} // Dùng hàm cập nhật URL
               />
             </div>
             <div className="mb-3">
               <input
                 className="form-control"
-                name="maxPrice"
+                name="max"
                 placeholder="Đến"
-                value={filters.maxPrice}
-                onChange={handleFilterChange}
+                value={priceInput.max} // Dùng state hiển thị
+                onChange={handlePriceChange} // Dùng hàm định dạng
+                onBlur={handlePriceBlur} // Dùng hàm cập nhật URL
               />
             </div>
 
@@ -159,7 +202,7 @@ const Products = () => {
 
         {/* DANH SÁCH SẢN PHẨM */}
         <div className="col-md-9">
-          <h3 className="mb-4 text-primary fw-bold">{currentCategoryName}</h3>
+          <h3 className="mb-4 text-primary fw-bold text-capitalize">{currentCategoryName}</h3>
 
           {loading ? (
             <div className="text-center py-5">

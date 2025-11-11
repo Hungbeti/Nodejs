@@ -1,23 +1,45 @@
-version: '3'
 services:
+  # Dịch vụ Cơ sở dữ liệu
   mongo:
-    image: mongo:latest
+    image: mongo:latest # Sử dụng image mongo chính thức
     ports:
-      - "27017:27017"
+      - "27017:27017" # Mở cổng 27017 để kết nối từ máy thật (tùy chọn)
+
+  # Dịch vụ Backend
   backend:
     build:
-      context: .
-      dockerfile: Dockerfile.backend
+      context: . # Xây dựng từ thư mục gốc
+      dockerfile: Dockerfile.backend # Sử dụng Dockerfile cho backend
     ports:
-      - "5000:5000"
-    env_file: backend/.env
+      - "5000:5000" # Ánh xạ cổng 5000 của máy thật vào cổng 5000 của container
+    env_file: backend/.env # Tự động nạp các biến môi trường
     depends_on:
-      - mongo
+      - mongo # Đảm bảo backend chỉ khởi động SAU KHI mongo đã khởi động
+    volumes:
+      # Ánh xạ code từ máy thật vào container (chế độ development)
+      - ./backend:/app/backend
+      # Bỏ qua node_modules trên máy thật, dùng node_modules của container
+      - /app/backend/node_modules
+
+  # Dịch vụ Frontend
   frontend:
     build:
-      context: .
-      dockerfile: Dockerfile.frontend
+      context: . # Xây dựng từ thư mục gốc
+      dockerfile: Dockerfile.frontend # Sử dụng Dockerfile cho frontend
     ports:
-      - "3000:3000"
+      - "3000:3000" # Ánh xạ cổng 3000 của máy thật vào cổng 3000 của container
     depends_on:
-      - backend
+      - backend # Đảm bảo frontend chỉ khởi động SAU KHI backend đã khởi động
+    # --- Bổ sung cho chế độ development ---
+    environment:
+      # Ép sử dụng "polling" để "hot reload" hoạt động trong Docker trên Windows/Mac
+      - CHOKIDAR_USEPOLLING=true
+    volumes:
+      # Ánh xạ code từ máy thật vào container (chế độ development)
+      - ./frontend:/app/frontend
+      # Bỏ qua node_modules trên máy thật, dùng node_modules của container
+      - /app/frontend/node_modules
+    # Ghi đè lệnh CMD (vốn là `npx serve -s build`)
+    # để chạy server phát triển (ví dụ: React, Vue)
+    command: npm start
+    # --- Hết phần bổ sung ---

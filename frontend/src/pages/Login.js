@@ -9,21 +9,60 @@ const Login = () => {
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
+  // URL API cho Google Auth (Giả sử backend chạy trên port 5000)
+  const googleAuthUrl = (api.defaults.baseURL || 'http://localhost:5000/api') + '/auth/google';
+
+  // const handleSubmit = async (e) => {
+  //   e.preventDefault();
+  //   setError('');
+  //   try {
+  //     const res = await api.post('/auth/login', { email, password }); 
+  //     const { token, requiresPasswordChange, role } = res.data;
+  //     localStorage.setItem('token', res.data.token);
+
+  //     // Trong handleSubmit
+  //     if (res.data.requiresPasswordChange) {
+  //       navigate('/change-password-first', { state: { token: res.data.token, role: payload.role } });
+  //     } else {
+  //       localStorage.setItem('token', res.data.token);
+  //       navigate(payload.role === 'admin' ? '/admin' : '/');
+  //     }
+
+  //     // GIẢI MÃ TOKEN ĐỂ LẤY ROLE
+  //     const payload = JSON.parse(atob(res.data.token.split('.')[1]));
+  //     if (payload.role === 'admin' || payload.isAdmin === true) {
+  //       navigate('/admin');
+  //       setTimeout(() => window.location.reload(), 100);
+  //     } else {
+  //       navigate('/');
+  //     }
+  //     alert('Đăng nhập thành công!');
+  //   } catch (err) {
+  //     setError(err.response?.data?.message || 'Đăng nhập thất bại');
+  //   }
+  // };
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
     try {
       const res = await api.post('/auth/login', { email, password });
-      localStorage.setItem('token', res.data.token);
+      
+      const { token, requiresPasswordChange, role } = res.data;
 
-      // GIẢI MÃ TOKEN ĐỂ LẤY ROLE
-      const payload = JSON.parse(atob(res.data.token.split('.')[1]));
-      if (payload.role === 'admin' || payload.isAdmin === true) {
-        navigate('/admin');
-        setTimeout(() => window.location.reload(), 100);
+      if (requiresPasswordChange) {
+        // Chuyển hướng đến trang đổi mật khẩu LẦN ĐẦU
+        // Gửi token và role qua state để trang sau sử dụng
+        navigate('/change-password-first', { 
+          state: { token: token, role: role } 
+        });
       } else {
-        navigate('/');
+        // Đăng nhập bình thường
+        localStorage.setItem('token', token);
+        // Tải lại trang để cập nhật trạng thái auth ở header
+        navigate(role === 'admin' ? '/admin' : '/');
+        window.location.reload(); 
       }
-      alert('Đăng nhập thành công!');
+      
     } catch (err) {
       setError(err.response?.data?.message || 'Đăng nhập thất bại');
     }
@@ -66,9 +105,10 @@ const Login = () => {
               </form>
 
               <div className="text-center mt-3">
-                <button className="btn btn-danger w-100">
+                {/* Đã đổi thành thẻ <a> để gọi API */}
+                <a href={googleAuthUrl} className="btn btn-danger w-100">
                   <i className="bi bi-google"></i> Tiếp tục với Google
-                </button>
+                </a>
               </div>
 
               <div className="text-center mt-3">

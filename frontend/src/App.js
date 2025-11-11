@@ -14,6 +14,9 @@ import { CartProvider } from './context/CartContext';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import AdminRoute from './routes/AdminRoute';
+import GoogleAuthSuccess from './pages/GoogleAuthSuccess';
+import ChangePasswordFirst from './pages/ChangePasswordFirst';
+import MyOrders from './pages/MyOrders';
 
 function App() {
   return (
@@ -28,6 +31,7 @@ function App() {
             <Route path="/cart" element={<Cart />} />
             <Route path="/checkout" element={<Checkout />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/my-orders" element={<MyOrders />} />
             <Route path="/admin/*" element={
               <AdminRoute>
                 <AdminDashboard />
@@ -35,6 +39,8 @@ function App() {
             } />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/google-success" element={<GoogleAuthSuccess />} />
+            <Route path="/change-password-first" element={<ChangePasswordFirst />} />
           </Routes>
         </div>
       </Router>
