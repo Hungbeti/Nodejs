@@ -150,6 +150,38 @@ router.post('/:id/reviews', protect, async (req, res) => {
   }
 });
 
+// === THÊM ROUTE MỚI: BÌNH LUẬN (CHO KHÁCH) ===
+router.post('/:id/comments', async (req, res) => {
+  try {
+    const { name, comment } = req.body;
+    
+    // Khách thì BẮT BUỘC phải có Tên và Bình luận
+    if (!name || !comment || name.trim() === '' || comment.trim() === '') {
+      return res.status(400).json({ msg: 'Vui lòng cung cấp tên và bình luận.' });
+    }
+
+    const product = await Product.findById(req.params.id);
+    if (!product) return res.status(404).json({ msg: 'Không tìm thấy sản phẩm' });
+
+    const review = {
+      user: null, // Không có user
+      name: name, // Lấy tên từ form
+      rating: null, // Không có sao
+      comment,
+    };
+
+    if (!product.reviews) product.reviews = [];
+    product.reviews.push(review);
+    
+    await product.save();
+    res.status(201).json({ msg: 'Đã thêm bình luận' });
+
+  } catch (err) {
+    console.error('Lỗi POST /:id/comments:', err); 
+    res.status(500).json({ msg: 'Lỗi server' });
+  }
+});
+
 // THÊM sản phẩm (admin)
 router.post('/', protect, admin, async (req, res) => {
   try {

@@ -19,7 +19,9 @@ const userSchema = new mongoose.Schema({
   loyaltyPoints: { type: Number, default: 0 },
   role: { type: String, default: 'user' },
   isFirstLogin: { type: Boolean, default: true }, // BẮT BUỘC ĐỔI MẬT KHẨU
-  isActive: { type: Boolean, default: true }
+  isActive: { type: Boolean, default: true },
+  resetPasswordToken: String,
+  resetPasswordExpire: Date
 });
 
 userSchema.pre('save', async function (next) {

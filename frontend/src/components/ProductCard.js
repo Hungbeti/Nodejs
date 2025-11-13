@@ -1,7 +1,8 @@
 //src/components/ProductCard.js
 import React from 'react';
-import { Link } from 'react-router-dom'; // 1. Import Link
+import { Link } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
+import { toast } from 'react-toastify';
 
 const ProductCard = ({ product }) => {
   const { addToCart } = useCart();
@@ -11,9 +12,9 @@ const ProductCard = ({ product }) => {
     e.preventDefault(); // Ngăn hành vi mặc định
     try {
       await addToCart(product, 1);
-      alert('Thêm vào giỏ thành công!');
+      toast('Thêm vào giỏ thành công!');
     } catch (err) {
-      alert('Không thể thêm vào giỏ: ' + (err.response?.data?.msg || err.message));
+      toast('Không thể thêm vào giỏ: ' + (err.response?.data?.msg || err.message));
     }
   };
 

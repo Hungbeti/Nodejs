@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
 // 1. SỬA LỖI IMPORT: Thêm Pagination, InputGroup, FormControl
 import { Modal, Button, Form, Pagination, InputGroup, FormControl } from 'react-bootstrap';
+import { toast } from 'react-toastify';
 
 const Orders = () => {
   const [orders, setOrders] = useState([]);
@@ -72,9 +73,9 @@ const Orders = () => {
       await api.patch(`/orders/${selectedOrder._id}/status`, { status: newStatus });
       setShowModal(false);
       fetchOrders(page); // Tải lại trang hiện tại
-      alert('Cập nhật trạng thái thành công!');
+      toast('Cập nhật trạng thái thành công!');
     } catch (err) {
-      alert('Lỗi cập nhật trạng thái');
+      toast('Lỗi cập nhật trạng thái');
     }
   };
 

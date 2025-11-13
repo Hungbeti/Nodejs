@@ -1,19 +1,36 @@
 // src/pages/admin/Users.js
 import React, { useEffect, useState } from 'react';
 import api from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 
 const Users = () => {
   const [users, setUsers] = useState([]);
+  const { user } = useAuth();
 
   useEffect(() => {
     const fetchUsers = async () => {
-      const res = await api.get('/admin/users');
-      setUsers(res.data.users);
+      try {
+        const res = await api.get('/admin/users');
+        
+        // 3. LỌC BỎ CHÍNH ADMIN RA KHỎI DANH SÁCH
+        const filteredUsers = res.data.users.filter(
+          u => u._id !== user._id 
+        );
+        setUsers(filteredUsers);
+        
+      } catch (err) {
+        console.error("Lỗi tải users:", err);
+      }
     };
-    fetchUsers();
-  }, []);
+    
+    // Chỉ fetch khi 'user' đã được tải
+    if (user && user._id) {
+      fetchUsers();
+    }
+  }, [user]); // Thêm 'user' vào dependency
 
   const toggleBan = async (id, isActive) => {
+    // (logic toggleBan giữ nguyên)
     await api.put(`/admin/users/${id}/ban`, { isActive: !isActive });
     setUsers(users.map(u => u._id === id ? { ...u, isActive: !isActive } : u));
   };

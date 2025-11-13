@@ -3,7 +3,8 @@ import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import api from '../services/api';
 import { useCart } from '../context/CartContext';
-import { useAuth } from '../context/AuthContext'; // Cần để check đăng nhập khi review
+import { useAuth } from '../context/AuthContext';
+import { toast } from 'react-toastify';
 
 const ProductDetail = () => {
   const { id } = useParams();
@@ -13,9 +14,10 @@ const ProductDetail = () => {
   
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
+  const [guestName, setGuestName] = useState('');
   
   const { addToCart } = useCart();
-  const { isLoggedIn } = useAuth();
+  const { isLoggedIn, user } = useAuth();
 
   const fetchProduct = async () => {
     setLoading(true);
@@ -36,25 +38,59 @@ const ProductDetail = () => {
   const handleAddToCart = async () => {
     try {
       await addToCart(product, 1);
-      alert('Thêm vào giỏ thành công!');
+      toast('Thêm vào giỏ thành công!');
     } catch (err) {
-      alert('Lỗi: ' + (err.response?.data?.msg || err.message));
+      toast('Lỗi: ' + (err.response?.data?.msg || err.message));
+    }
+  };
+
+  // HÀM CHO NGƯỜI DÙNG ĐÃ ĐĂNG NHẬP
+  const submitLoggedInReview = async (e) => {
+    e.preventDefault();
+    if (!comment || !rating) {
+      return toast('Vui lòng nhập đủ đánh giá và bình luận');
+    }
+    try {
+      await api.post(`/products/${id}/reviews`, { rating, comment });
+      toast('Gửi đánh giá thành công!');
+      fetchProduct();
+      setComment('');
+      setRating(5);
+    } catch (err) {
+      toast('Lỗi gửi đánh giá: ' + (err.response?.data?.msg || 'Lỗi server'));
+    }
+  };
+
+  // HÀM MỚI CHO KHÁCH
+  const submitGuestComment = async (e) => {
+    e.preventDefault();
+    if (!comment || !guestName) {
+      return toast('Vui lòng nhập tên và bình luận');
+    }
+    try {
+      await api.post(`/products/${id}/comments`, { name: guestName, comment });
+      toast('Gửi bình luận thành công!');
+      fetchProduct();
+      setComment('');
+      setGuestName('');
+    } catch (err) {
+      toast('Lỗi gửi bình luận: ' + (err.response?.data?.msg || 'Lỗi server'));
     }
   };
   
   const submitReview = async (e) => {
     e.preventDefault();
     if (!comment || !rating) {
-      return alert('Vui lòng nhập đủ đánh giá và bình luận');
+      return toast('Vui lòng nhập đủ đánh giá và bình luận');
     }
     try {
       await api.post(`/products/${id}/reviews`, { rating, comment });
-      alert('Gửi đánh giá thành công!');
+      toast('Gửi đánh giá thành công!');
       fetchProduct(); // Tải lại sản phẩm để xem review mới
       setComment('');
       setRating(5);
     } catch (err) {
-      alert('Lỗi gửi đánh giá: ' + (err.response?.data?.msg || 'Lỗi server'));
+      toast('Lỗi gửi đánh giá: ' + (err.response?.data?.msg || 'Lỗi server'));
     }
   };
 
@@ -149,45 +185,76 @@ const ProductDetail = () => {
         <div className="col-md-8">
           <h3>Đánh giá & Bình luận</h3>
           {/* Form gửi đánh giá */}
-          {isLoggedIn ? (
-            <div className="card my-4">
-              <div className="card-body">
-                <form onSubmit={submitReview}>
+          <div className="card my-4">
+            <div className="card-body">
+              {/* Chọn form nào để render dựa trên isLoggedIn */}
+              <form onSubmit={isLoggedIn ? submitLoggedInReview : submitGuestComment}>
+                
+                {isLoggedIn ? (
+                  // --- FORM KHI ĐÃ ĐĂNG NHẬP (CÓ SAO) ---
+                  <>
+                    <div className="mb-3">
+                      <label className="form-label">Tên của bạn</label>
+                      <input 
+                        className="form-control" 
+                        value={user?.name || ''} 
+                        readOnly 
+                        disabled 
+                      />
+                    </div>
+                    <div className="mb-3">
+                      <label className="form-label">Đánh giá của bạn (sao)</label>
+                      <select className="form-select" value={rating} onChange={e => setRating(e.target.value)}>
+                        <option value="5">5 sao (Tuyệt vời)</option>
+                        <option value="4">4 sao (Tốt)</option>
+                        <option value="3">3 sao (Bình thường)</option>
+                        <option value="2">2 sao (Tệ)</option>
+                        <option value="1">1 sao (Rất tệ)</option>
+                      </select>
+                    </div>
+                  </>
+                ) : (
+                  // --- FORM KHI LÀ KHÁCH (KHÔNG CÓ SAO) ---
                   <div className="mb-3">
-                    <label className="form-label">Đánh giá của bạn (sao)</label>
-                    <select className="form-select" value={rating} onChange={e => setRating(e.target.value)}>
-                      <option value="5">5 sao (Tuyệt vời)</option>
-                      <option value="4">4 sao (Tốt)</option>
-                      <option value="3">3 sao (Bình thường)</option>
-                      <option value="2">2 sao (Tệ)</option>
-                      <option value="1">1 sao (Rất tệ)</option>
-                    </select>
-                  </div>
-                  <div className="mb-3">
-                    <label className="form-label">Bình luận của bạn</label>
-                    <textarea 
+                    <label className="form-label">Tên của bạn</label>
+                    <input 
                       className="form-control" 
-                      rows="3" 
-                      value={comment}
-                      onChange={e => setComment(e.target.value)}
-                      placeholder="Viết bình luận của bạn..."
+                      value={guestName}
+                      onChange={e => setGuestName(e.target.value)}
+                      placeholder="Nhập tên của bạn..."
                       required
-                    ></textarea>
+                    />
                   </div>
-                  <button type="submit" className="btn btn-primary">Gửi đánh giá</button>
-                </form>
-              </div>
+                )}
+
+                {/* TRƯỜNG CHUNG: BÌNH LUẬN */}
+                <div className="mb-3">
+                  <label className="form-label">Bình luận của bạn</label>
+                  <textarea 
+                    className="form-control" 
+                    rows="3" 
+                    value={comment}
+                    onChange={e => setComment(e.target.value)}
+                    placeholder="Viết bình luận của bạn..."
+                    required
+                  ></textarea>
+                </div>
+                <button type="submit" className="btn btn-primary">
+                  {isLoggedIn ? 'Gửi đánh giá' : 'Gửi bình luận'}
+                </button>
+              </form>
             </div>
-          ) : (
-            <div className="alert alert-info">Vui lòng đăng nhập để gửi đánh giá bằng sao.</div>
-          )}
+          </div>
           
           {/* Danh sách các review đã có */}
           {product.reviews.length > 0 ? (
             product.reviews.map(review => (
               <div key={review._id} className="card card-body mb-3">
                 <strong>{review.name}</strong>
-                <div>{[...Array(review.rating)].map((_, i) => '⭐')}</div>
+                {/* Chỉ hiển thị sao nếu có 'rating' */}
+                {review.rating && (
+                  <div>{[...Array(review.rating)].map((_, i) => '⭐')}</div>
+                )}
                 <p className="mt-2 mb-0">{review.comment}</p>
                 <small className="text-muted mt-2">{new Date(review.createdAt).toLocaleString()}</small>
               </div>

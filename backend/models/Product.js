@@ -3,9 +3,14 @@ const mongoose = require('mongoose');
 
 // Schema cho bình luận/đánh giá
 const reviewSchema = new mongoose.Schema({
-  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  // user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  // name: { type: String, required: true },
+  // rating: { type: Number, required: true },
+
+  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   name: { type: String, required: true },
-  rating: { type: Number, required: true }, // Từ 1 đến 5
+  rating: { type: Number, min: 1, max: 5 },
+
   comment: { type: String, required: true }
 }, { timestamps: true });
 

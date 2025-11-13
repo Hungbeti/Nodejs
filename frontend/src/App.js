@@ -17,12 +17,28 @@ import AdminRoute from './routes/AdminRoute';
 import GoogleAuthSuccess from './pages/GoogleAuthSuccess';
 import ChangePasswordFirst from './pages/ChangePasswordFirst';
 import MyOrders from './pages/MyOrders';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 function App() {
   return (
     <CartProvider>
       <Router>
         <Navbar />
+        <ToastContainer
+          position="top-right"
+          autoClose={3000} // Tự động tắt sau 3 giây
+          hideProgressBar={false}
+          newestOnTop={false}
+          closeOnClick
+          rtl={false}
+          pauseOnFocusLoss
+          draggable
+          pauseOnHover
+          theme="light"
+        />
         <div className="container mt-4">
           <Routes>
             <Route path="/" element={<Home />} />
@@ -32,6 +48,8 @@ function App() {
             <Route path="/checkout" element={<Checkout />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/my-orders" element={<MyOrders />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password/:token" element={<ResetPassword />} />
             <Route path="/admin/*" element={
               <AdminRoute>
                 <AdminDashboard />

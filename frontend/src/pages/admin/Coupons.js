@@ -2,6 +2,19 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
 import { Modal, Button, Form, Table, Badge } from 'react-bootstrap';
+import { toast } from 'react-toastify'; // Giả sử bạn đã cài react-toastify
+
+// === HÀM HELPER: ĐỊNH DẠNG SỐ ===
+const formatPriceInput = (value) => {
+  const numString = String(value).replace(/[^0-9]/g, '');
+  if (!numString) return '';
+  return Number(numString).toLocaleString('vi-VN');
+};
+
+const parsePriceInput = (value) => {
+  return String(value).replace(/\./g, ''); 
+};
+// ===================================
 
 const Coupons = () => {
   const [coupons, setCoupons] = useState([]);
@@ -9,30 +22,38 @@ const Coupons = () => {
   const [showModal, setShowModal] = useState(false);
   const [newCoupon, setNewCoupon] = useState({
     code: '',
-    type: 'percent', // Mặc định là giảm theo %
+    type: 'percent',
     value: 0,
     minOrderValue: 0,
     maxUses: 10,
     applicableCategories: []
   });
+  
+  // State riêng để hiển thị giá trị đã định dạng
+  const [formattedValues, setFormattedValues] = useState({
+    value: '0',
+    minOrderValue: '0'
+  });
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Tải dữ liệu ban đầu
   useEffect(() => {
     fetchCoupons();
     fetchCategories();
   }, []);
 
-  // Tải danh sách coupon
+  // === CÁC HÀM CƠ BẢN (ĐẦY ĐỦ) ===
   const fetchCoupons = async () => {
     try {
-      const { data } = await api.get('/coupons'); // Route admin đã định nghĩa
+      const { data } = await api.get('/coupons');
       setCoupons(data);
     } catch (err) {
       console.error('Lỗi tải coupons:', err);
     }
   };
-  // Tải danh sách category
+
   const fetchCategories = async () => {
     try {
       const { data } = await api.get('/categories');
@@ -40,7 +61,6 @@ const Coupons = () => {
     } catch (err) { console.error('Lỗi tải categories:', err); }
   };
 
-  // Tạo mã ngẫu nhiên 5 ký tự
   const generateCode = () => {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let result = '';
@@ -50,46 +70,98 @@ const Coupons = () => {
     setNewCoupon({ ...newCoupon, code: result });
   };
 
-  // Xóa coupon
   const handleDelete = async (id) => {
     if (window.confirm('Bạn chắc chắn muốn xóa mã này?')) {
       try {
         await api.delete(`/coupons/${id}`);
+        toast.success('Đã xóa mã giảm giá');
         fetchCoupons();
       } catch (err) {
-        alert('Lỗi xóa mã');
+        toast.error('Lỗi xóa mã');
       }
     }
   };
+  // ===================================
 
-  // Xử lý chọn danh mục (Multi-select đơn giản)
+  // === CÁC HÀM XỬ LÝ FORM ===
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setNewCoupon({ ...newCoupon, [name]: value });
+  };
+
+  const handlePriceInputChange = (e) => {
+    const { name, value } = e.target;
+    const rawValue = parsePriceInput(value);
+    
+    setFormattedValues({ ...formattedValues, [name]: formatPriceInput(rawValue) });
+    setNewCoupon({ ...newCoupon, [name]: Number(rawValue) || 0 });
+  };
+
+  const handlePercentChange = (e) => {
+    let value = e.target.value.replace(/[^0-9]/g, ''); // Chỉ cho phép số
+    
+    if (value === '') {
+      setNewCoupon({...newCoupon, value: 0});
+      return;
+    }
+
+    // Chuyển sang số (loại bỏ số 0 ở đầu)
+    let numValue = Number(value);
+
+    // Giới hạn
+    if (numValue > 100) numValue = 100;
+    if (numValue < 0) numValue = 0;
+    
+    // Cập nhật state với giá trị số đã làm sạch
+    // Input sẽ tự re-render về giá trị đúng (ví dụ: 1 thay vì 01)
+    setNewCoupon({...newCoupon, value: numValue});
+  };
+  
   const handleCategoryChange = (e) => {
     const options = e.target.options;
-    const selected = [];
+    let selected = [];
+    let containsAll = false;
+
     for (let i = 0; i < options.length; i++) {
       if (options[i].selected) {
+        if (options[i].value === 'all') {
+          containsAll = true;
+          break;
+        }
         selected.push(options[i].value);
       }
     }
-    setNewCoupon({ ...newCoupon, applicableCategories: selected });
+    setNewCoupon({ 
+      ...newCoupon, 
+      applicableCategories: containsAll ? ['all'] : selected 
+    });
   };
 
-  // Xử lý Submit Form
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    if (
+      newCoupon.type === 'fixed' &&                 // Nếu là giảm tiền cố định
+      newCoupon.minOrderValue > 0 &&                // Và có đặt đơn tối thiểu
+      newCoupon.value > newCoupon.minOrderValue   // Và giá trị giảm > đơn tối thiểu
+    ) {
+      setError('Lỗi: Giá trị giảm không được lớn hơn đơn hàng tối thiểu.');
+      return; // Dừng, không gửi
+    }
     setLoading(true);
     try {
       const payload = { ...newCoupon };
       if (payload.applicableCategories.includes('all')) {
           payload.applicableCategories = [];
       }
+      
       await api.post('/coupons', payload);
-      alert('Tạo mã thành công!');
+      toast.success('Tạo mã thành công!');
       setShowModal(false);
-      fetchCoupons(); // Tải lại danh sách
+      fetchCoupons();
       // Reset form
       setNewCoupon({ code: '', type: 'percent', value: 0, minOrderValue: 0, maxUses: 10, applicableCategories: [] });
+      setFormattedValues({ value: '0', minOrderValue: '0' });
     } catch (err) {
       setError(err.response?.data?.msg || 'Lỗi khi tạo mã');
     } finally {
@@ -97,6 +169,7 @@ const Coupons = () => {
     }
   };
 
+  // === PHẦN RENDER ===
   return (
     <div className="p-4">
       <div className="d-flex justify-content-between align-items-center mb-4">
@@ -149,7 +222,7 @@ const Coupons = () => {
             ))}
             {coupons.length === 0 && (
               <tr>
-                <td colSpan="7" className="text-center text-muted py-4">Chưa có mã giảm giá nào</td>
+                <td colSpan="8" className="text-center text-muted py-4">Chưa có mã giảm giá nào</td>
               </tr>
             )}
           </tbody>
@@ -172,7 +245,9 @@ const Coupons = () => {
                   type="text" 
                   maxLength={5}
                   value={newCoupon.code}
-                  onChange={(e) => setNewCoupon({...newCoupon, code: e.target.value.toUpperCase()})}
+                  name="code"
+                  onChange={handleInputChange}
+                  onInput={(e) => e.target.value = e.target.value.toUpperCase()}
                   placeholder="VD: SALE5"
                   required
                 />
@@ -180,13 +255,28 @@ const Coupons = () => {
               </div>
             </Form.Group>
 
+            <Form.Group className="mb-3">
+              <Form.Label>Đơn hàng tối thiểu (VND)</Form.Label>
+              <Form.Control 
+                type="text"
+                min={0}
+                value={formattedValues.minOrderValue}
+                name="minOrderValue"
+                onChange={handlePriceInputChange}
+              />
+              <Form.Text className="text-muted">
+                Nhập 0 nếu không yêu cầu giá trị tối thiểu.
+              </Form.Text>
+            </Form.Group>
+
             <div className="row">
               <div className="col-md-6">
                 <Form.Group className="mb-3">
                   <Form.Label>Loại giảm giá</Form.Label>
                   <Form.Select 
+                    name="type"
                     value={newCoupon.type}
-                    onChange={(e) => setNewCoupon({...newCoupon, type: e.target.value})}
+                    onChange={handleInputChange}
                   >
                     <option value="percent">Theo phần trăm (%)</option>
                     <option value="fixed">Số tiền cố định (VND)</option>
@@ -197,11 +287,16 @@ const Coupons = () => {
                 <Form.Group className="mb-3">
                   <Form.Label>Giá trị giảm</Form.Label>
                   <Form.Control 
-                    type="number"
+                    type="text"
                     min={0}
                     max={newCoupon.type === 'percent' ? 100 : undefined}
-                    value={newCoupon.value}
-                    onChange={(e) => setNewCoupon({...newCoupon, value: Number(e.target.value)})}
+                    value={newCoupon.type === 'percent' ? newCoupon.value : formattedValues.value}
+                    onChange={
+                      newCoupon.type === 'percent' 
+                        ? handlePercentChange
+                        : handlePriceInputChange
+                    }
+                    name="value"
                     required
                   />
                 </Form.Group>
@@ -209,23 +304,10 @@ const Coupons = () => {
             </div>
 
             <Form.Group className="mb-3">
-              <Form.Label>Đơn hàng tối thiểu (VND)</Form.Label>
-              <Form.Control 
-                type="number"
-                min={0}
-                value={newCoupon.minOrderValue}
-                onChange={(e) => setNewCoupon({...newCoupon, minOrderValue: Number(e.target.value)})}
-              />
-              <Form.Text className="text-muted">
-                Nhập 0 nếu không yêu cầu giá trị tối thiểu.
-              </Form.Text>
-            </Form.Group>
-
-            <Form.Group className="mb-3">
               <Form.Label>Phạm vi áp dụng (Giữ Ctrl để chọn nhiều)</Form.Label>
               <Form.Select 
                 multiple 
-                htmlSize={5} // Hiển thị 5 dòng
+                htmlSize={5}
                 value={newCoupon.applicableCategories}
                 onChange={handleCategoryChange}
               >
@@ -235,7 +317,7 @@ const Coupons = () => {
                 ))}
               </Form.Select>
               <Form.Text className="text-muted">
-                Chọn "Tất cả sản phẩm" hoặc chọn các danh mục cụ thể.
+                Chọn "Tất cả sản phẩm" (sẽ bỏ chọn các mục khác) hoặc chọn các danh mục cụ thể.
               </Form.Text>
             </Form.Group>  
 
@@ -245,8 +327,9 @@ const Coupons = () => {
                 type="number"
                 min={1}
                 max={10}
+                name="maxUses"
                 value={newCoupon.maxUses}
-                onChange={(e) => setNewCoupon({...newCoupon, maxUses: Number(e.target.value)})}
+                onChange={handleInputChange}
                 required
               />
             </Form.Group>

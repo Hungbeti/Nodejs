@@ -1,6 +1,7 @@
 //src/pages/admin/Products.js
 import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
+import { toast } from 'react-toastify';
 
 const AdminProducts = () => {
   /* ---------- STATE ---------- */
@@ -66,7 +67,7 @@ const AdminProducts = () => {
       const params = buildParams({ search: categorySearch });
       const { data } = await api.get(`/categories?${params}`);
       setCategories(data.categories || []);
-    } catch { alert('Lỗi tải danh mục'); }
+    } catch { toast('Lỗi tải danh mục'); }
   };
 
   const fetchBrands = async () => {
@@ -178,7 +179,7 @@ const AdminProducts = () => {
     try {
       await api.delete(`/products/${id}`);
       fetchProducts();
-    } catch { alert('Lỗi khi xóa'); }
+    } catch { toast('Lỗi khi xóa'); }
   };
 
   const resetProduct = () => {
@@ -209,7 +210,7 @@ const AdminProducts = () => {
     try {
       await api.delete(`/categories/${id}`);
       fetchCategories();
-    } catch { alert('Lỗi khi xóa danh mục'); }
+    } catch { toast('Lỗi khi xóa danh mục'); }
   };
   const resetCategory = () => { setCategoryForm(initCategory); setEditingCategory(null); setError({ ...error, category: '' }); };
 
@@ -238,7 +239,7 @@ const AdminProducts = () => {
     try {
       await api.delete(`/brands/${id}`);
       fetchBrands();
-    } catch { alert('Lỗi khi xóa thương hiệu'); }
+    } catch { toast('Lỗi khi xóa thương hiệu'); }
   };
   const resetBrand = () => { setBrandForm(initBrand); setEditingBrand(null); setError({ ...error, brand: '' }); };
 

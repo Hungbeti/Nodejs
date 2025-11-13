@@ -49,4 +49,16 @@ const couponSchema = new mongoose.Schema({
   }]
 }, { timestamps: true });
 
+couponSchema.pre('validate', function(next) {
+  if (
+    this.type === 'fixed' && 
+    this.minOrderValue > 0 && 
+    this.value > this.minOrderValue
+  ) {
+    // Nếu vi phạm, tạo lỗi validation
+    this.invalidate('value', 'Giá trị giảm không được lớn hơn đơn hàng tối thiểu.', this.value);
+  }
+  next();
+});
+
 module.exports = mongoose.model('Coupon', couponSchema);
