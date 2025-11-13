@@ -116,4 +116,84 @@ const changePasswordFirst = async (req, res) => {
   }
 };
 
-module.exports = { register, login, changePasswordFirst };
+// QUÊN MẬT KHẨU
+const forgotPassword = async (req, res) => {
+  const { email } = req.body;
+  try {
+    const user = await User.findOne({ email });
+    if (!user) {
+      // Bảo mật: Không thông báo "Không tìm thấy user"
+      return res.json({ message: 'Email khôi phục đã được gửi (nếu tồn tại)' });
+    }
+
+    // 1. Tạo token
+    const resetToken = crypto.randomBytes(20).toString('hex');
+    user.resetPasswordToken = crypto.createHash('sha256').update(resetToken).digest('hex');
+    user.resetPasswordExpire = Date.now() + 10 * 60 * 1000; // 10 phút
+
+    await user.save();
+
+    // 2. Tạo URL (Frontend)
+    const resetUrl = `http://localhost:3000/reset-password/${resetToken}`;
+
+    // 3. Gửi email
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }
+    });
+
+    await transporter.sendMail({
+      from: '"PC Shop" <no-reply@pcshop.com>',
+      to: user.email,
+      subject: 'Khôi phục mật khẩu PC Shop',
+      html: `
+        <h3>Xin chào ${user.name},</h3>
+        <p>Bạn nhận được email này vì bạn (hoặc ai đó) đã yêu cầu khôi phục mật khẩu.</p>
+        <p>Vui lòng nhấn vào link sau để đặt lại mật khẩu (link có hiệu lực 10 phút):</p>
+        <a href="${resetUrl}" target="_blank">${resetUrl}</a>
+        <p>Nếu bạn không yêu cầu, vui lòng bỏ qua email này.</p>
+      `
+    });
+
+    res.json({ message: 'Email khôi phục đã được gửi' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Lỗi server' });
+  }
+};
+
+// HÀM MỚI 2: ĐẶT LẠI MẬT KHẨU
+const resetPassword = async (req, res) => {
+  const { token } = req.params;
+  const { newPassword } = req.body;
+
+  try {
+    // 1. Hash token từ URL để so sánh với CSDL
+    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+
+    // 2. Tìm user bằng token và kiểm tra thời gian hết hạn
+    const user = await User.findOne({
+      resetPasswordToken: hashedToken,
+      resetPasswordExpire: { $gt: Date.now() } // $gt = "greater than" (lớn hơn)
+    });
+
+    if (!user) {
+      return res.status(400).json({ message: 'Token không hợp lệ hoặc đã hết hạn' });
+    }
+
+    // 3. Đặt mật khẩu mới (Model sẽ tự hash)
+    user.password = newPassword;
+    user.isFirstLogin = false; // Đảm bảo trạng thái này được reset
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpire = undefined;
+
+    await user.save();
+
+    res.json({ message: 'Đổi mật khẩu thành công!' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Lỗi server' });
+  }
+};
+
+module.exports = { register, login, changePasswordFirst, forgotPassword, resetPassword };

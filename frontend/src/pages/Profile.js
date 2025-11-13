@@ -2,6 +2,89 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
 
+// === TẠO COMPONENT MỚI CHO ĐỔI MẬT KHẨU ===
+const ChangePasswordForm = () => {
+  const [passwords, setPasswords] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' });
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+
+  const handleChange = (e) => {
+    setPasswords({ ...passwords, [e.target.name]: e.target.value });
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setMessage('');
+    
+    if (passwords.newPassword !== passwords.confirmPassword) {
+      return setError('Mật khẩu mới không khớp');
+    }
+    if (passwords.newPassword.length < 6) {
+      return setError('Mật khẩu mới ít nhất 6 ký tự');
+    }
+
+    try {
+      // (API này đã tồn tại trong userRoutes.js)
+      const { data } = await api.put('/profile/password', {
+        oldPassword: passwords.oldPassword,
+        newPassword: passwords.newPassword
+      });
+      setMessage(data.msg);
+      setPasswords({ oldPassword: '', newPassword: '', confirmPassword: '' }); // Reset form
+    } catch (err) {
+      setError(err.response?.data?.msg || 'Lỗi cập nhật');
+    }
+  };
+
+  return (
+    <div className="card mt-4">
+      <div className="card-body">
+        <h4>Thay đổi mật khẩu</h4>
+        <hr />
+        {message && <div className="alert alert-success">{message}</div>}
+        {error && <div className="alert alert-danger">{error}</div>}
+        <form onSubmit={handleSubmit}>
+          <div className="mb-3">
+            <label className="form-label">Mật khẩu cũ</label>
+            <input 
+              type="password"
+              name="oldPassword"
+              className="form-control"
+              value={passwords.oldPassword}
+              onChange={handleChange}
+              required
+            />
+          </div>
+          <div className="mb-3">
+            <label className="form-label">Mật khẩu mới</label>
+            <input 
+              type="password"
+              name="newPassword"
+              className="form-control"
+              value={passwords.newPassword}
+              onChange={handleChange}
+              required
+            />
+          </div>
+          <div className="mb-3">
+            <label className="form-label">Xác nhận mật khẩu mới</label>
+            <input 
+              type="password"
+              name="confirmPassword"
+              className="form-control"
+              value={passwords.confirmPassword}
+              onChange={handleChange}
+              required
+            />
+          </div>
+          <button type="submit" className="btn btn-primary">Lưu mật khẩu mới</button>
+        </form>
+      </div>
+    </div>
+  );
+};
+
 const Profile = () => {
   const [profile, setProfile] = useState({ name: '', email: '', addresses: [], loyaltyPoints: 0 });
   const [loading, setLoading] = useState(true);
@@ -86,6 +169,8 @@ const Profile = () => {
               <small>(Tương đương {(profile.loyaltyPoints * 1000).toLocaleString()} VND)</small>
             </div>
           </div>
+          {/* === THÊM CARD ĐỔI MẬT KHẨU === */}
+          <ChangePasswordForm />
         </div>
 
         {/* === CỘT PHẢI (QUẢN LÝ) === */}

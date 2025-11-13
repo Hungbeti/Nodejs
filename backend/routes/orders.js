@@ -158,16 +158,16 @@ router.post('/', async (req, res) => {
   let user = null;
   let token;
 
-  // 1. XÁC ĐỊNH USER
-  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-    try {
-      token = req.headers.authorization.split(' ')[1];
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      user = await User.findById(decoded._id);
-    } catch (error) { /* Bỏ qua, coi như khách */ }
-  }
-
   try {
+    // 1. XÁC ĐỊNH USER
+    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+      try {
+        token = req.headers.authorization.split(' ')[1];
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        user = await User.findById(decoded._id);
+      } catch (error) { /* Bỏ qua, coi như khách */ }
+    }
+
     // 2. XỬ LÝ TÀI KHOẢN (Nếu là khách)
     if (!user) {
       const { email, name, addressLine, phone } = shipping; // Lấy phone và addressLine
@@ -302,7 +302,12 @@ router.post('/', async (req, res) => {
     const order = new Order({
       user: user._id,
       items: validatedItems,
-      shippingAddress: shipping, // Dùng shipping address từ form
+      shippingAddress: {
+        name: shipping.name,
+        email: shipping.email,
+        phone: shipping.phone || '', // Đảm bảo phone tồn tại
+        address: shipping.address || shipping.addressLine // Ánh xạ từ 'addressLine'
+      }, // Dùng shipping address từ form
       paymentMethod: payment,
       subtotal,
       tax,

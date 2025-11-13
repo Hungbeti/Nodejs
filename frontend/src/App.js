@@ -17,6 +17,8 @@ import AdminRoute from './routes/AdminRoute';
 import GoogleAuthSuccess from './pages/GoogleAuthSuccess';
 import ChangePasswordFirst from './pages/ChangePasswordFirst';
 import MyOrders from './pages/MyOrders';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 
 function App() {
   return (
@@ -32,6 +34,8 @@ function App() {
             <Route path="/checkout" element={<Checkout />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/my-orders" element={<MyOrders />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password/:token" element={<ResetPassword />} />
             <Route path="/admin/*" element={
               <AdminRoute>
                 <AdminDashboard />
