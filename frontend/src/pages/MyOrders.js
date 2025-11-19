@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
+import { toast } from 'react-toastify';
 
 const MyOrders = () => {
   const [orders, setOrders] = useState([]);
@@ -31,15 +32,42 @@ const MyOrders = () => {
     }
   };
 
+  // === 2. THÊM HÀM HỦY ĐƠN HÀNG ===
+  const handleCancelOrder = async () => {
+    if (window.confirm('Bạn có chắc chắn muốn hủy đơn hàng này? Hành động này không thể hoàn tác.')) {
+      try {
+        await api.patch(`/orders/my-orders/${selectedOrder._id}/cancel`);
+        toast.success('Đã hủy đơn hàng thành công');
+        // Tải lại chi tiết đơn hàng để cập nhật trạng thái
+        fetchOrderDetail(selectedOrder._id);
+        
+        // Tải lại danh sách đơn hàng (để cập nhật trạng thái ở trang trước)
+        // (Không bắt buộc, nhưng nên có nếu bạn quay lại)
+        // fetchOrders(); // Bạn cần định nghĩa fetchOrders ở ngoài useEffect
+      } catch (err) {
+        toast.error(err.response?.data?.msg || 'Lỗi hủy đơn hàng');
+      }
+    }
+  };
+
   if (loading) return <div>Đang tải...</div>;
 
   // Giao diện xem chi tiết đơn hàng
   if (selectedOrder) {
+    const canCancel = selectedOrder.currentStatus === 'pending' || selectedOrder.currentStatus === 'processing';
     return (
       <div>
         <button className="btn btn-outline-secondary mb-3" onClick={() => setSelectedOrder(null)}>
           &larr; Quay lại danh sách
         </button>
+        {canCancel && (
+          <button 
+              className="btn btn-danger mb-3 ms-2"
+              onClick={handleCancelOrder}
+          >
+            <i className="bi bi-x-circle me-1"></i> Hủy đơn hàng
+          </button>
+        )}
         <h3>Chi tiết đơn hàng #{selectedOrder._id.slice(-6)}</h3>
         <p>Ngày đặt: {new Date(selectedOrder.createdAt).toLocaleDateString()}</p>
         <p>Trạng thái hiện tại: <span className="badge bg-primary">{selectedOrder.currentStatus}</span></p>

@@ -37,6 +37,9 @@ const Coupons = () => {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showOrdersModal, setShowOrdersModal] = useState(false);
+  const [viewingOrders, setViewingOrders] = useState([]);
+  const [viewingCoupon, setViewingCoupon] = useState(null);
 
   // Tải dữ liệu ban đầu
   useEffect(() => {
@@ -169,6 +172,17 @@ const Coupons = () => {
     }
   };
 
+  const handleViewOrders = async (coupon) => {
+    setViewingCoupon(coupon.code);
+    try {
+      const { data } = await api.get(`/coupons/${coupon.code}/orders`);
+      setViewingOrders(data);
+      setShowOrdersModal(true);
+    } catch (err) {
+      toast.error('Lỗi tải danh sách đơn hàng');
+    }
+  };
+
   // === PHẦN RENDER ===
   return (
     <div className="p-4">
@@ -214,6 +228,15 @@ const Coupons = () => {
                   )}
                 </td>
                 <td>
+                  <Button 
+                    variant="outline-primary" 
+                    size="sm" 
+                    className="me-2"
+                    onClick={() => handleViewOrders(coupon)}
+                    disabled={coupon.uses === 0}
+                  >
+                    <i className="bi bi-eye"></i>
+                  </Button>
                   <Button variant="outline-danger" size="sm" onClick={() => handleDelete(coupon._id)}>
                     <i className="bi bi-trash"></i>
                   </Button>
@@ -342,6 +365,41 @@ const Coupons = () => {
             </Button>
           </Modal.Footer>
         </Form>
+      </Modal>
+      <Modal show={showOrdersModal} onHide={() => setShowOrdersModal(false)} size="lg">
+        <Modal.Header closeButton>
+          <Modal.Title>Các đơn hàng đã dùng mã: {viewingCoupon}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Table striped bordered hover size="sm">
+            <thead className="table-light">
+              <tr>
+                <th>Mã ĐH</th>
+                <th>Người dùng</th>
+                <th>Ngày đặt</th>
+                <th>Tổng tiền</th>
+                <th>Trạng thái</th>
+              </tr>
+            </thead>
+            <tbody>
+              {viewingOrders.length > 0 ? (
+                viewingOrders.map(order => (
+                  <tr key={order._id}>
+                    <td>#{order._id.slice(-6)}</td>
+                    <td>{order.user?.name || 'N/A'}</td>
+                    <td>{new Date(order.createdAt).toLocaleString()}</td>
+                    <td>{order.total.toLocaleString()}đ</td>
+                    <td><Badge bg="primary">{order.currentStatus}</Badge></td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="5" className="text-center text-muted">Không có đơn hàng nào.</td>
+                </tr>
+              )}
+            </tbody>
+          </Table>
+        </Modal.Body>
       </Modal>
     </div>
   );

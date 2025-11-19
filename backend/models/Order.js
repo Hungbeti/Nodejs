@@ -20,8 +20,7 @@ const statusHistorySchema = new Schema({
 
 const orderSchema = new Schema({
   user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-  
-  items: [orderItemSchema], // Sử dụng schema lồng
+  items: [orderItemSchema],
 
   shippingAddress: {
     name: { type: String, required: true },
@@ -37,6 +36,7 @@ const orderSchema = new Schema({
   tax: { type: Number, required: true },
   shippingFee: { type: Number, required: true },
   discount: { type: Number, default: 0 },
+  couponCode: { type: String, trim: true, uppercase: true },
   total: { type: Number, required: true },
 
   // Điểm thân thiết

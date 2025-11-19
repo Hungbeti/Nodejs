@@ -15,12 +15,12 @@ const Orders = () => {
   // State cho phân trang và lọc
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [filter, setFilter] = useState('all'); // all, today, yesterday, week, month, custom
+  const [filter, setFilter] = useState('all');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
 
   // 2. SỬA LỖI HÀM: Thêm tham số (pageToFetch)
-  const fetchOrders = async (pageToFetch) => {
+  const fetchOrders = async (pageToFetch = 1) => {
     setLoading(true);
     try {
       const params = {
@@ -75,14 +75,15 @@ const Orders = () => {
       fetchOrders(page); // Tải lại trang hiện tại
       toast('Cập nhật trạng thái thành công!');
     } catch (err) {
-      toast('Lỗi cập nhật trạng thái');
+      toast.error(err.response?.data?.msg || 'Lỗi cập nhật trạng thái');
     }
   };
 
   // Xử lý chuyển trang
   const handlePageChange = (newPage) => {
+    if (newPage < 1 || newPage > totalPages) return; // Ngăn chuyển trang không hợp lệ
     setPage(newPage);
-    fetchOrders(newPage); // Tải trang mới
+    fetchOrders(newPage);
   };
 
   // (Phần return giữ nguyên)
@@ -170,7 +171,7 @@ const Orders = () => {
       </div>
 
       {/* PHÂN TRANG */}
-      {totalPages > 1 && (
+      {totalPages >= 1 && (
         <Pagination className="justify-content-center mt-4">
           <Pagination.Prev onClick={() => handlePageChange(page - 1)} disabled={page === 1} />
           {[...Array(totalPages)].map((_, i) => (
@@ -224,6 +225,7 @@ const Orders = () => {
               <Form.Select 
                 value={newStatus} 
                 onChange={(e) => setNewStatus(e.target.value)}
+                disabled={selectedOrder.currentStatus === 'cancelled' || selectedOrder.currentStatus === 'delivered'}
               >
                 <option value="pending">Pending (Đang chờ)</option>
                 <option value="processing">Processing (Đang xử lý)</option>
@@ -231,6 +233,11 @@ const Orders = () => {
                 <option value="delivered">Delivered (Đã giao)</option>
                 <option value="cancelled">Cancelled (Đã hủy)</option>
               </Form.Select>
+              {(selectedOrder.currentStatus === 'cancelled' || selectedOrder.currentStatus === 'delivered') && (
+                <Form.Text className="text-danger">
+                  Không thể thay đổi trạng thái của đơn hàng đã Hủy hoặc đã Giao.
+                </Form.Text>
+              )}
             </div>
           )}
         </Modal.Body>
@@ -238,7 +245,10 @@ const Orders = () => {
           <Button variant="secondary" onClick={() => setShowModal(false)}>
             Đóng
           </Button>
-          <Button variant="primary" onClick={handleUpdateStatus}>
+          <Button 
+            variant="primary" 
+            onClick={handleUpdateStatus} 
+            disabled={selectedOrder?.currentStatus === 'cancelled' || selectedOrder?.currentStatus === 'delivered'}>
             Cập nhật
           </Button>
         </Modal.Footer>

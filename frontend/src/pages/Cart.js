@@ -6,6 +6,7 @@ import api from '../services/api';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { Modal, Button, ListGroup, Badge } from 'react-bootstrap';
+import { toast } from 'react-toastify';
 
 // === LẤY CÁC HÀM TỪ CART CONTEXT ===
 // (Đây là các hàm xử lý localStorage cho khách)
@@ -107,7 +108,7 @@ const Cart = () => {
       }
       loadCart(); // Tải lại state của giỏ hàng
     } catch (err) {
-      alert('Lỗi cập nhật');
+      toast('Lỗi cập nhật');
     }
   };
 
@@ -124,7 +125,7 @@ const Cart = () => {
       }
       loadCart(); // Tải lại state của giỏ hàng
     } catch (err) {
-      alert('Lỗi xóa');
+      toast('Lỗi xóa');
     }
   };
 
@@ -138,7 +139,7 @@ const Cart = () => {
       const res = await api.post('/coupons/validate', { code: coupon, orderTotal: cart.subtotal, cartItems: cart.items });
       setCart(prev => ({ ...prev, discount: res.data.discountAmount, total: prev.subtotal + prev.tax + prev.shipping - res.data.discountAmount }));
       setError('');
-      alert('Áp dụng thành công!');
+      toast('Áp dụng thành công!');
     } catch (err) {
       setCart(prev => ({ 
         ...prev, 
@@ -167,12 +168,17 @@ const Cart = () => {
 
       // Nếu API trả về success: true
       if (response.data.success) {
-        navigate('/checkout'); // Điều hướng đến trang thanh toán
+        navigate('/checkout', { 
+          state: { 
+            couponCode: coupon, // Gửi mã đã nhập
+            discount: cart.discount // Gửi số tiền đã giảm
+          } 
+        });
       }
       
     } catch (err) {
       // Nếu API trả về lỗi 400 (hết hàng)
-      alert(err.response?.data?.msg || 'Không thể thanh toán. Vui lòng thử lại.');
+      toast(err.response?.data?.msg || 'Không thể thanh toán. Vui lòng thử lại.');
     }
   };
 

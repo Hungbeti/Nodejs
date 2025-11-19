@@ -3,7 +3,6 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 
 /**
  * Hàm giải mã payload của JWT một cách an toàn (xử lý Base64URL)
- * (Chúng ta đã dùng hàm này trong GoogleAuthSuccess.js)
  */
 const decodeJwtPayload = (token) => {
   try {
@@ -58,7 +57,7 @@ export const AuthProvider = ({ children }) => {
         logout();
       }
     }
-  }, []);
+  }, []); // Chỉ chạy 1 lần khi app khởi động
 
   const login = (token) => {
     localStorage.setItem("token", token);

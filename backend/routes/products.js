@@ -17,7 +17,7 @@ router.get('/', async (req, res) => {
       maxPrice,
       sort,
       page = 1,
-      limit = 12 // Thêm limit có thể tùy chỉnh
+      limit = 20 // Thêm limit có thể tùy chỉnh
     } = req.query;
 
     const skip = (page - 1) * limit;

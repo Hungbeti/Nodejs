@@ -1,9 +1,9 @@
 // src/pages/Checkout.js
-import React, { useState, useEffect, useMemo } from 'react';
-import { Link, useNavigate } from 'react-router-dom'; // Import Link
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { useCart } from '../context/CartContext'; // Import useCart
+import { useCart } from '../context/CartContext';
 
 // === LẤY CÁC HÀM TỪ CART CONTEXT ===
 const getGuestCart = () => {
@@ -18,11 +18,9 @@ const clearGuestCart = () => {
 
 // HÀM TÍNH TOÁN TỔNG TIỀN
 const calculateTotals = (items, discount = 0) => {
-  // Đảm bảo 'items' là mảng và 'product' tồn tại
   if (!Array.isArray(items)) {
     items = [];
   }
-
   const validItems = items.filter(item => item && item.product && typeof item.product.price === 'number');
 
   const subtotal = validItems.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
@@ -32,17 +30,16 @@ const calculateTotals = (items, discount = 0) => {
   return { items: validItems, subtotal, discount, tax, shipping, total };
 };
 // ======================================
+
 const Checkout = () => {
   const [step, setStep] = useState(1);
   
-  // State cho địa chỉ
-  const [profileAddresses, setProfileAddresses] = useState([]); // Địa chỉ đã lưu
-  const [selectedAddress, setSelectedAddress] = useState(''); // ID của địa chỉ đã chọn
-  // State cho form địa chỉ (dùng cho cả khách VÀ người dùng nhập địa chỉ mới)
+  const [profileAddresses, setProfileAddresses] = useState([]);
+  const [selectedAddress, setSelectedAddress] = useState('');
   const [shipping, setShipping] = useState({ name: '', email: '', phone: '', addressLine: '' }); 
   
   const [payment, setPayment] = useState('cod');
-  const [coupon, setCoupon] = useState('');
+  const [coupon, setCoupon] = useState(''); // State để lưu mã coupon
   
   const [items, setItems] = useState([]);
   const [totals, setTotals] = useState({ subtotal: 0, discount: 0, tax: 0, shipping: 30000, total: 30000 });
@@ -55,135 +52,114 @@ const Checkout = () => {
   const [pointsToUse, setPointsToUse] = useState(0);
 
   const { isLoggedIn } = useAuth();
-  const { fetchCartCount } = useCart(); // Lấy hàm cập nhật navbar
+  const { fetchCartCount } = useCart();
   const navigate = useNavigate();
+  const { state } = useLocation(); // Lấy state từ Cart.js
 
   useEffect(() => {
+    // === NHẬN COUPON TỪ TRANG GIỎ HÀNG ===
+    if (state && state.couponCode) {
+      setCoupon(state.couponCode);
+    }
+    // ===================================
+
     const loadData = async () => {
+      let cartData;
+      let discount = state?.discount || 0; // Lấy discount từ state
+
       if (isLoggedIn) {
         // NGƯỜI DÙNG ĐÃ ĐĂNG NHẬP
         try {
           const cartRes = await api.get('/cart');
-          const calcs = calculateTotals(cartRes.data.items || [], cartRes.data.discount);
-          setItems(cartRes.data.items || []);
-          setTotals(calcs);
+          cartData = cartRes.data.items || [];
           
           const profileRes = await api.get('/profile');
-          // Tự động điền email (không đổi) và tên vào form shipping (dùng khi nhập mới)
           setShipping(s => ({ 
             ...s, 
             name: profileRes.data.name, 
             email: profileRes.data.email 
           }));
-          
-          // Lấy danh sách địa chỉ và điểm
           setProfileAddresses(profileRes.data.addresses || []);
           setLoyaltyPoints(profileRes.data.loyaltyPoints || 0);
 
-          // Tự động chọn địa chỉ đầu tiên (nếu có)
           if (profileRes.data.addresses.length > 0) {
             setSelectedAddress(profileRes.data.addresses[0]._id);
           } else {
-            setSelectedAddress('new'); // Nếu không có, buộc nhập mới
+            setSelectedAddress('new');
           }
-
         } catch (err) {
           console.error("Lỗi tải dữ liệu checkout:", err);
           navigate('/cart');
         }
       } else {
         // LÀ KHÁCH
-        const guestItems = getGuestCart();
-        if (guestItems.length === 0) {
+        cartData = getGuestCart();
+        if (cartData.length === 0) {
           navigate('/cart'); // Quay lại giỏ hàng nếu trống
         }
-        const calcs = calculateTotals(guestItems, 0);
-        setItems(guestItems);
-        setTotals(calcs);
       }
+      
+      // Tính toán tổng tiền sau khi có dữ liệu giỏ hàng
+      const calcs = calculateTotals(cartData, discount);
+      setItems(cartData);
+      setTotals(calcs);
     };
     
     loadData();
-  }, [isLoggedIn, navigate]);
+  }, [isLoggedIn, navigate, state]); // Thêm 'state' vào dependency
 
   const handleUsePointsChange = (e) => {
     const use = e.target.checked;
     setUsePoints(use);
-
-    // SỬA LOGIC ĐIỂM (1 điểm = 1000đ)
     const pointsValue = loyaltyPoints * 1000;
+    
+    // Tính total TẠM THỜI (chưa trừ điểm)
+    const currentTotal = totals.subtotal - totals.discount + totals.tax + totals.shipping;
+
     if (use) {
-      // Dùng tối đa (không vượt quá tổng tiền hoặc giá trị điểm)
-      const maxPointsValue = Math.min(pointsValue, totals.total);
-      // Cập nhật số điểm thực sự dùng (làm tròn)
+      const maxPointsValue = Math.min(pointsValue, currentTotal);
       setPointsToUse(Math.floor(maxPointsValue / 1000));
     } else {
       setPointsToUse(0);
     }
   };
 
+  // HÀM NÀY GIỜ CHỈ ĐỂ VÔ HIỆU HÓA
   const applyCoupon = async () => {
-    try {
-      const res = await api.post('/coupons/validate', { 
-        code: coupon,
-        orderTotal: totals.subtotal,
-        cartItems: items
-      });
-      
-      setTotals(prev => ({ 
-        ...prev, 
-        discount: res.data.discountAmount, 
-        total: prev.subtotal + prev.tax + prev.shipping - res.data.discountAmount 
-      }));
-      alert(res.data.msg);
-
-    } catch (err) {
-      setTotals(prev => ({ 
-        ...prev, 
-        discount: 0, 
-        total: prev.subtotal + prev.tax + prev.shipping 
-      }));
-      alert(err.response?.data?.msg || 'Mã không hợp lệ');
-    }
+    alert('Vui lòng áp dụng mã giảm giá ở trang Giỏ hàng.');
   };
 
   const placeOrder = async () => {
     try {
-      // 1. CHUẨN BỊ DỮ LIỆU ĐỊA CHỈ
       let finalShippingAddress;
       if (isLoggedIn) {
         if (selectedAddress === 'new') {
-          // Dùng địa chỉ mới nhập từ form 'shipping'
           finalShippingAddress = {
             name: shipping.name,
             email: shipping.email,
             phone: shipping.phone,
-            address: shipping.addressLine
+            addressLine: shipping.addressLine // Sửa: Gửi addressLine
           };
         } else {
-          // Tìm địa chỉ đã chọn
           const addr = profileAddresses.find(a => a._id === selectedAddress);
           finalShippingAddress = {
             name: addr.fullName,
-            email: shipping.email, // Lấy email từ profile (không lưu trong địa chỉ)
+            email: shipping.email,
             phone: addr.phone,
-            address: addr.addressLine
+            addressLine: addr.addressLine // Sửa: Gửi addressLine
           };
         }
       } else {
-        // Khách (dùng form shipping)
         finalShippingAddress = shipping;
       }
 
-      // 2. CHUẨN BỊ DỮ LIỆU ĐƠN HÀNG
       const orderData = {
         shipping: finalShippingAddress,
         payment: payment,
-        couponCode: coupon,
+        couponCode: coupon, // Gửi mã coupon đã nhận từ Cart.js
         loyaltyPointsUsed: usePoints ? pointsToUse : 0,
       };
 
-      // Nếu là khách, thêm giỏ hàng từ localStorage vào body
       if (!isLoggedIn) {
         orderData.items = items.map(item => ({
           productId: item.product._id, 
@@ -195,12 +171,10 @@ const Checkout = () => {
       setOrderId(res.data._id);
       setOrderSuccess(true);
       
-      // Xóa giỏ hàng sau khi thành công
       if (!isLoggedIn) {
         clearGuestCart();
       }
       
-      // Cập nhật lại số lượng trên Navbar
       fetchCartCount(); 
       
     } catch (err) {
@@ -219,7 +193,7 @@ const Checkout = () => {
     );
   }
   
-  // Tính toán lại tổng tiền cuối cùng (1 điểm = 1000đ)
+  // Tính tổng tiền cuối cùng dựa trên state (1 điểm = 1000đ)
   const finalTotal = totals.total - (pointsToUse * 1000);
 
   return (
@@ -235,7 +209,6 @@ const Checkout = () => {
           <h4>1. Thông tin giao hàng</h4>
           
           {isLoggedIn ? (
-            // === HIỂN THỊ CHO NGƯỜI DÙNG ĐÃ ĐĂNG NHẬP ===
             <div className="mb-3">
               <p>Email: <strong>{shipping.email}</strong></p>
               
@@ -281,7 +254,6 @@ const Checkout = () => {
               )}
             </div>
           ) : (
-            // === HIỂN THỊ CHO KHÁCH (Như cũ) ===
             <div>
               <input className="form-control mb-2" placeholder="Họ tên" value={shipping.name} onChange={e => setShipping({...shipping, name: e.target.value})} required/>
               <input className="form-control mb-2" placeholder="Email" value={shipping.email} onChange={e => setShipping({...shipping, email: e.target.value})} required/>
@@ -315,9 +287,16 @@ const Checkout = () => {
       {step === 3 && (
         <div>
           <h4>3. Xác nhận</h4>
-          <input className="form-control mb-2" placeholder="Mã giảm giá" value={coupon} onChange={e => setCoupon(e.target.value)} />
-          {/* <button className="btn btn-outline-primary mb-3" onClick={validateCoupon}>Kiểm tra</button> */}
-
+          {/* === VÔ HIỆU HÓA Ô COUPON === */}
+          <input 
+            className="form-control mb-3" 
+            placeholder="Mã giảm giá (Đã áp dụng ở giỏ hàng)" 
+            value={coupon} 
+            readOnly 
+            disabled 
+          />
+          {/* ========================== */}
+          
           {isLoggedIn && loyaltyPoints > 0 && (
             <div className="form-check my-3">
               <input 
@@ -328,15 +307,13 @@ const Checkout = () => {
                 onChange={handleUsePointsChange} 
               />
               <label className="form-check-label" htmlFor="usePoints">
-                {/* SỬA LỖI TÍNH ĐIỂM: 1 điểm = 1000đ */}
                 Dùng {loyaltyPoints.toLocaleString()} điểm (tương đương {(loyaltyPoints * 1000).toLocaleString()}đ)
               </label>
             </div>
           )}
 
           <p>Tạm tính: {totals.subtotal.toLocaleString()} VND</p>
-          {totals.discount > 0 && <p className="text-success">Giảm giá coupon: -{totals.discount.toLocaleString()} VND</p>}
-          {/* SỬA LỖI TÍNH ĐIỂM: 1 điểm = 1000đ */}
+          <p className="text-success">Giảm giá: -{totals.discount.toLocaleString()} VND</p>
           {usePoints && <p className="text-success">Giảm từ điểm: -{(pointsToUse * 1000).toLocaleString()} VND</p>}
           <p>Thuế VAT: {totals.tax.toLocaleString()} VND</p>
           <p>Vận chuyển: {totals.shipping.toLocaleString()} VND</p>

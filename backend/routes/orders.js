@@ -126,6 +126,59 @@ router.get('/my-orders/:id', protect, async (req, res) => {
   }
 });
 
+// === THÊM ROUTE MỚI: USER HỦY ĐƠN HÀNG ===
+router.patch('/my-orders/:id/cancel', protect, async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id).populate('user');
+    
+    if (!order) {
+      return res.status(404).json({ msg: 'Không tìm thấy đơn hàng' });
+    }
+    // 1. Xác thực chính chủ
+    if (order.user._id.toString() !== req.user._id.toString()) {
+      return res.status(401).json({ msg: 'Không có quyền' });
+    }
+    
+    // 2. Kiểm tra điều kiện (chỉ được hủy khi 'pending' hoặc 'processing')
+    if (order.currentStatus !== 'pending' && order.currentStatus !== 'processing') {
+      return res.status(400).json({ 
+        msg: `Không thể hủy đơn hàng ở trạng thái "${order.currentStatus}"` 
+      });
+    }
+
+    // --- Logic Hoàn tác (Quan trọng) ---
+    // 3. Hoàn trả lại hàng vào kho và giảm số lượng đã bán
+    for (const item of order.items) {
+      await Product.findByIdAndUpdate(item.product, {
+        $inc: { 
+          stock: item.quantity,    // Trả lại hàng
+          sold: -item.quantity   // Giảm số đã bán
+        }
+      });
+    }
+    
+    // 4. Hoàn trả lại điểm thân thiết (nếu có)
+    const user = order.user; // Đã populate ở trên
+    user.loyaltyPoints -= order.loyaltyPointsEarned; // Bỏ điểm đã kiếm
+    user.loyaltyPoints += order.loyaltyPointsUsed; // Trả lại điểm đã dùng
+    await user.save();
+    
+    // 5. Cập nhật trạng thái đơn hàng
+    order.currentStatus = 'cancelled';
+    order.statusHistory.push({
+      status: 'cancelled',
+      timestamp: new Date(),
+      notes: 'Hủy bởi người dùng'
+    });
+    await order.save();
+    
+    res.json(order); // Trả về đơn hàng đã cập nhật
+  } catch (err) {
+    console.error("Lỗi khi hủy đơn hàng:", err);
+    res.status(500).json({ msg: 'Lỗi server' });
+  }
+});
+
 // GET: Chi tiết đơn hàng (admin) (Đặt SAU route /my-orders/:id)
 router.get('/:id', protect, admin, async (req, res) => {
   try {
@@ -157,6 +210,7 @@ router.post('/', async (req, res) => {
 
   let user = null;
   let token;
+  let coupon = null;
 
   try {
     // 1. XÁC ĐỊNH USER
@@ -243,9 +297,8 @@ router.post('/', async (req, res) => {
       
       // === CẬP NHẬT TỒN KHO VÀ SỐ LƯỢNG ĐÃ BÁN ===
       product.stock -= item.quantity;
-      product.sold = (product.sold || 0) + item.quantity; // <-- SỬA LỖI "BÁN CHẠY NHẤT"
+      product.sold = (product.sold || 0) + item.quantity;
       await product.save();
-      // ===========================================
     }
 
     let tax = subtotal * 0.1;
@@ -257,10 +310,10 @@ router.post('/', async (req, res) => {
     // 5. ÁP DỤNG MÃ GIẢM GIÁ (Logic này cần được đồng bộ với /coupons/validate)
     if (couponCode) {
       coupon = await Coupon.findOne({ code: couponCode, isActive: true });
-      if (coupon && coupon.uses < coupon.maxUses && total >= coupon.minOrderValue) {
+      if (coupon && coupon.uses < coupon.maxUses && subtotal >= coupon.minOrderValue) {
         
         // Kiểm tra logic danh mục
-        let applicableTotal = total;
+        let applicableTotal = subtotal;
         if (coupon.applicableCategories && coupon.applicableCategories.length > 0) {
           const applicableItems = validatedItems.filter(item => {
             const product = cartItems.find(p => p.product.toString() === item.product.toString());
@@ -275,8 +328,10 @@ router.post('/', async (req, res) => {
         } else {
           discount = coupon.value;
         }
-        discount = Math.min(discount, applicableTotal); // Không giảm quá tổng tiền
+        discount = Math.min(discount, applicableTotal);
         total -= discount;
+      } else {
+         coupon = null;
       }
     }
 
@@ -313,6 +368,7 @@ router.post('/', async (req, res) => {
       tax,
       shippingFee,
       discount,
+      couponCode: coupon ? coupon.code : undefined,
       loyaltyPointsUsed: loyaltyPointsUsedNum,
       loyaltyPointsEarned,
       total,
@@ -384,6 +440,12 @@ router.patch('/:id/status', protect, admin, async (req, res) => {
 
     const order = await Order.findById(req.params.id);
     if (!order) return res.status(404).json({ msg: 'Không tìm thấy' });
+
+    if (order.currentStatus === 'cancelled' || order.currentStatus === 'delivered') {
+      return res.status(400).json({ 
+        msg: `Không thể cập nhật trạng thái cho đơn hàng đã "${order.currentStatus}"` 
+      });
+    }
 
     order.currentStatus = status;
     order.statusHistory.push({

@@ -1,5 +1,6 @@
 // backend/controllers/couponController.js
 const Coupon = require('../models/Coupon');
+const Order = require('../models/Order');
 
 // === ADMIN ONLY ===
 
@@ -129,10 +130,25 @@ const validateCoupon = async (req, res) => {
   }
 };
 
+const getOrdersByCoupon = async (req, res) => {
+  try {
+    const { code } = req.params;
+    const orders = await Order.find({ couponCode: code.toUpperCase() })
+      .populate('user', 'name email')
+      .select('_id createdAt total currentStatus user')
+      .sort({ createdAt: -1 });
+    
+    res.json(orders);
+  } catch (err) {
+    res.status(500).json({ msg: 'Lỗi server' });
+  }
+};
+
 module.exports = {
   getCoupons,
   createCoupon,
   deleteCoupon,
   validateCoupon,
-  getAvailableCoupons
+  getAvailableCoupons,
+  getOrdersByCoupon
 };
