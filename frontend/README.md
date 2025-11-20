@@ -69,6 +69,8 @@ This section has moved here: [https://facebook.github.io/create-react-app/docs/d
 
 This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
 
-### 'npm install recharts date-fns'
+### npm install recharts date-fns
 ### npm install react-toastify FE
-### npm install socket.io-client BE
+### npm install socket.io BE
+### npm install socket.io-client FE
+### npm install multer BE

@@ -141,6 +141,10 @@ router.post('/:id/reviews', protect, async (req, res) => {
     product.reviews.push(review);
     
     await product.save();
+    if (req.io) {
+      const newReview = product.reviews[product.reviews.length - 1];
+      req.io.to(req.params.id).emit('newReview', newReview);
+    }
     res.status(201).json({ msg: 'Đã thêm đánh giá' });
     
   } catch (err) {
@@ -170,10 +174,16 @@ router.post('/:id/comments', async (req, res) => {
       comment,
     };
 
-    if (!product.reviews) product.reviews = [];
+    if (!product.reviews) {
+      product.reviews = [];
+    }
     product.reviews.push(review);
     
     await product.save();
+    if (req.io) {
+      const newComment = product.reviews[product.reviews.length - 1];
+      req.io.to(req.params.id).emit('newReview', newComment);
+    }
     res.status(201).json({ msg: 'Đã thêm bình luận' });
 
   } catch (err) {

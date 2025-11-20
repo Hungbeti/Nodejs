@@ -198,11 +198,12 @@ const Coupons = () => {
           <thead className="table-light">
             <tr>
               <th>Mã</th>
-              <th>Loại giảm</th>
+              {/* <th>Loại giảm</th> */}
               <th>Giá trị</th>
               <th>Đơn tối thiểu</th>
               <th>Áp dụng cho</th>
               <th>Đã dùng/Giới hạn</th>
+              <th>Ngày tạo</th>
               <th>Trạng thái</th>
               <th>Hành động</th>
             </tr>
@@ -211,7 +212,7 @@ const Coupons = () => {
             {coupons.map(coupon => (
               <tr key={coupon._id}>
                 <td><Badge bg="info" className="fs-6">{coupon.code}</Badge></td>
-                <td>{coupon.type === 'percent' ? 'Phần trăm (%)' : 'Số tiền cố định'}</td>
+                {/* <td>{coupon.type === 'percent' ? 'Phần trăm (%)' : 'Số tiền cố định'}</td> */}
                 <td className="fw-bold text-success">
                   {coupon.type === 'percent' ? `${coupon.value}%` : `${coupon.value.toLocaleString()}đ`}
                 </td>
@@ -220,6 +221,7 @@ const Coupons = () => {
                 <td>
                   {coupon.uses} / {coupon.maxUses}
                 </td>
+                <td>{new Date(coupon.createdAt).toLocaleDateString('vi-VN')}</td>
                 <td>
                   {coupon.uses >= coupon.maxUses ? (
                     <Badge bg="secondary">Hết lượt</Badge>
@@ -228,15 +230,17 @@ const Coupons = () => {
                   )}
                 </td>
                 <td>
+                  {/* Nút xem */}
                   <Button 
                     variant="outline-primary" 
-                    size="sm" 
+                    size="sm"
                     className="me-2"
                     onClick={() => handleViewOrders(coupon)}
                     disabled={coupon.uses === 0}
                   >
                     <i className="bi bi-eye"></i>
                   </Button>
+                  {/* Nút xóa */}
                   <Button variant="outline-danger" size="sm" onClick={() => handleDelete(coupon._id)}>
                     <i className="bi bi-trash"></i>
                   </Button>

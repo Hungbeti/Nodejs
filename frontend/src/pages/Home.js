@@ -26,7 +26,7 @@ const Home = () => {
     <div className="mb-5">
       <h2 className="mb-3">{title}</h2>
       {products.length > 0 ? (
-        <div className="row row-cols-2 row-cols-md-4 row-cols-lg-6 g-3">
+        <div className="row row-cols-2 row-cols-md-4 row-cols-lg-5 g-3">
           {products.map(p => (
             <div className="col" key={p._id}>
               <ProductCard product={p} />
