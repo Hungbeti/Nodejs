@@ -213,6 +213,11 @@ router.post('/', async (req, res) => {
   let coupon = null;
 
   try {
+
+    const shipping = req.body.shippingAddress;
+    if (!shipping || !shipping.name || !shipping.address) {
+      return res.status(400).json({ msg: 'Thông tin giao hàng không hợp lệ hoặc thiếu' });
+    }
     // 1. XÁC ĐỊNH USER
     if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
       try {

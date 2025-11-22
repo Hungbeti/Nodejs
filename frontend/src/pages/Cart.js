@@ -2,38 +2,40 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../services/api';
-// import socket from '../socket'; // Tạm thời vô hiệu hóa socket
+// import socket from '../socket'; 
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { Modal, Button, ListGroup, Badge } from 'react-bootstrap';
 import { toast } from 'react-toastify';
 
 // === LẤY CÁC HÀM TỪ CART CONTEXT ===
-// (Đây là các hàm xử lý localStorage cho khách)
 const getGuestCart = () => {
   const cart = localStorage.getItem('guestCart');
   return cart ? JSON.parse(cart) : []; 
 };
-
 const saveGuestCart = (items) => {
   localStorage.setItem('guestCart', JSON.stringify(items));
 };
-
 const getCartCount = (items) => {
   return items.reduce((sum, item) => sum + item.quantity, 0);
 };
 // ======================================
 
 const Cart = () => {
-  const [cart, setCart] = useState({ items: [], subtotal: 0, discount: 0, tax: 0, shipping: 0, total: 0 });
+  // Thêm 'selectedItems' vào state cart (hoặc tách riêng)
+  // Ở đây mình tách riêng để dễ quản lý
+  const [cartItems, setCartItems] = useState([]); 
+  const [selectedItems, setSelectedItems] = useState([]); // Mảng chứa product._id
+  
+  const [totals, setTotals] = useState({ subtotal: 0, discount: 0, tax: 0, shipping: 0, total: 0 });
+  
   const [coupon, setCoupon] = useState('');
   const [error, setError] = useState('');
   const [showCouponModal, setShowCouponModal] = useState(false);
   const [availableCoupons, setAvailableCoupons] = useState([]);
   
-  // Lấy các hàm/trạng thái cần thiết
   const { fetchCartCount } = useCart();
-  const { isLoggedIn } = useAuth(); // 2. LẤY TRẠNG THÁI ĐĂNG NHẬP
+  const { isLoggedIn } = useAuth();
   const navigate = useNavigate();
 
   // Tải danh sách coupon khả dụng
@@ -47,172 +49,246 @@ const Cart = () => {
     }
   };
 
-  // Chọn coupon từ danh sách
   const handleSelectCoupon = (code) => {
-    setCoupon(code); // Điền mã vào ô input
+    setCoupon(code);
     setShowCouponModal(false);
-    // Tùy chọn: Tự động gọi applyCoupon() luôn ở đây nếu muốn
   };
 
-  // TÍNH TOÁN TỔNG TIỀN (Helper)
-  const calculateTotals = (items, discount = 0) => {
-    const subtotal = items.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
-    const tax = subtotal * 0.1; // 10% VAT
-    const shipping = 30000; // Fixed shipping
-    const total = subtotal - discount + tax + shipping;
-    return { items, subtotal, discount, tax, shipping, total };
-  };
+  // === TÍNH TOÁN TỔNG TIỀN (CHỈ CHO SẢN PHẨM ĐƯỢC CHỌN) ===
+  const calculateTotals = (items, selectedIds, discount = 0) => {
+    const validItems = (items || []).filter(item => item && item.product && typeof item.product.price === 'number');
+    
+    // Lọc ra các item được chọn
+    const itemsToCalc = validItems.filter(item => selectedIds.includes(item.product._id));
 
-  // 3. NÂNG CẤP loadCart
+    const subtotal = itemsToCalc.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
+    
+    // Nếu subtotal = 0 (không chọn gì) thì các phí khác cũng = 0
+    const tax = subtotal > 0 ? subtotal * 0.1 : 0; 
+    const shipping = subtotal > 0 ? 30000 : 0;
+    
+    // Discount không được vượt quá tổng tiền (subtotal + tax + shipping)
+    const maxDiscount = subtotal + tax + shipping;
+    const finalDiscount = Math.min(discount, maxDiscount);
+    
+    const total = subtotal + tax + shipping - finalDiscount;
+    
+    return { subtotal, discount: finalDiscount, tax, shipping, total };
+  };
+  // ========================================================
+
   const loadCart = async () => {
     try {
+      let items = [];
       if (isLoggedIn) {
-        // ĐÃ ĐĂNG NHẬP: Tải từ API (như cũ)
         const res = await api.get('/cart');
-        const calcs = calculateTotals(res.data.items || [], res.data.discount);
-        setCart(calcs);
+        items = res.data.items || [];
+        // Mặc định chọn tất cả khi mới tải (nếu muốn)
+        // setSelectedItems(items.map(i => i.product._id)); 
       } else {
-        // LÀ KHÁCH: Tải từ localStorage
-        const items = getGuestCart();
-        const calcs = calculateTotals(items, 0); // Khách không có discount
-        setCart(calcs);
+        items = getGuestCart();
       }
-      fetchCartCount(); // Cập nhật lại số lượng (dù không cần thiết nhưng để cho chắc)
+      setCartItems(items);
+      // Tính toán lại dựa trên selectedItems hiện tại
+      setTotals(calculateTotals(items, selectedItems, 0)); // Reset discount khi load lại
+      fetchCartCount();
     } catch (err) {
-      // Lỗi 401 sẽ rơi vào đây nếu là khách (như cũ)
-      // Nhưng giờ chúng ta đã xử lý khách ở trên
-      setCart(calculateTotals([], 0)); // Đặt về rỗng
+      setCartItems([]);
+      setTotals(calculateTotals([], [], 0));
     }
   };
 
   useEffect(() => {
     loadCart();
-    // socket.on('cartUpdated', loadCart);
-    // return () => socket.off('cartUpdated');
-  }, [isLoggedIn]); // Thêm isLoggedIn làm dependency
+  }, [isLoggedIn]);
 
-  // 4. NÂNG CẤP updateQuantity
+  // Khi selectedItems thay đổi, tính lại tiền
+  useEffect(() => {
+    setTotals(calculateTotals(cartItems, selectedItems, totals.discount));
+  }, [selectedItems, cartItems]);
+
+
+  // === XỬ LÝ CHECKBOX ===
+  const handleSelectItem = (productId) => {
+    if (selectedItems.includes(productId)) {
+      setSelectedItems(selectedItems.filter(id => id !== productId));
+    } else {
+      setSelectedItems([...selectedItems, productId]);
+    }
+  };
+
+  const handleSelectAll = (e) => {
+    if (e.target.checked) {
+      setSelectedItems(cartItems.map(i => i.product._id));
+    } else {
+      setSelectedItems([]);
+    }
+  };
+  // ======================
+
   const updateQuantity = async (productId, qty) => {
     if (qty < 1) return removeItem(productId);
     try {
       if (isLoggedIn) {
         await api.put('/cart/update', { productId: productId, quantity: qty });
-        // socket.emit('cartUpdate');
       } else {
         const items = getGuestCart();
         const item = items.find(i => i.product._id === productId);
-        if (item) {
-          item.quantity = qty;
-          saveGuestCart(items);
-        }
+        if (item) item.quantity = qty;
+        saveGuestCart(items);
       }
-      loadCart(); // Tải lại state của giỏ hàng
-    } catch (err) {
-      toast('Lỗi cập nhật');
-    }
+      loadCart();
+    } catch (err) { toast.error('Lỗi cập nhật'); }
   };
 
-  // 5. NÂNG CẤP removeItem
   const removeItem = async (productId) => {
     try {
       if (isLoggedIn) {
         await api.delete(`/cart/remove/${productId}`);
-        // socket.emit('cartUpdate');
       } else {
         let items = getGuestCart();
         items = items.filter(i => i.product._id !== productId);
         saveGuestCart(items);
       }
-      loadCart(); // Tải lại state của giỏ hàng
-    } catch (err) {
-      toast('Lỗi xóa');
-    }
+      // Xóa khỏi danh sách đã chọn nếu đang chọn
+      setSelectedItems(prev => prev.filter(id => id !== productId));
+      loadCart();
+    } catch (err) { toast.error('Lỗi xóa'); }
   };
 
   const applyCoupon = async () => {
-    // Chỉ cho phép khi đã đăng nhập
-    // if (!isLoggedIn) {
-    //   setError('Vui lòng đăng nhập để dùng mã giảm giá');
-    //   return;
-    // }
+    setError('');
+    if (selectedItems.length === 0) {
+      setError('Vui lòng chọn sản phẩm để áp dụng mã.');
+      return;
+    }
+
     try {
-      const res = await api.post('/coupons/validate', { code: coupon, orderTotal: cart.subtotal, cartItems: cart.items });
-      setCart(prev => ({ ...prev, discount: res.data.discountAmount, total: prev.subtotal + prev.tax + prev.shipping - res.data.discountAmount }));
-      setError('');
-      toast('Áp dụng thành công!');
+      // Chỉ gửi các item được chọn để check coupon
+      const selectedCartItems = cartItems.filter(item => selectedItems.includes(item.product._id));
+
+      const res = await api.post('/coupons/validate', { 
+        code: coupon,
+        orderTotal: totals.subtotal, // Subtotal của các item đã chọn
+        cartItems: selectedCartItems      
+      });
+
+      if (res.data.valid) {
+        const discountAmount = res.data.discountAmount;
+        // Cập nhật state totals trực tiếp
+        setTotals(prev => ({
+           ...prev,
+           discount: discountAmount,
+           total: prev.subtotal + prev.tax + prev.shipping - discountAmount
+        }));
+        toast.success(res.data.msg);
+      } else {
+        setError(res.data.msg || 'Mã không hợp lệ');
+      }
     } catch (err) {
-      setCart(prev => ({ 
-        ...prev, 
-        discount: 0, 
-        total: prev.subtotal + prev.tax + prev.shipping 
-      }));
+      setTotals(prev => ({ ...prev, discount: 0, total: prev.subtotal + prev.tax + prev.shipping }));
       setError(err.response?.data?.msg || 'Mã không hợp lệ');
     }
   };
-
+  
   const handleCheckout = async () => {
+    if (selectedItems.length === 0) {
+      toast.warn('Vui lòng chọn ít nhất 1 sản phẩm để thanh toán.');
+      return;
+    }
+
     try {
+      // Lọc ra items để gửi đi
+      const itemsToCheckout = cartItems.filter(item => selectedItems.includes(item.product._id));
+
       let response;
-      if (isLoggedIn) {
-        // Nếu đã đăng nhập, backend sẽ tự tìm giỏ hàng qua token
-        response = await api.post('/cart/check-stock');
-      } else {
-        // Nếu là khách, gửi giỏ hàng localStorage lên
-        const guestCart = getGuestCart();
-        const payload = guestCart.map(item => ({
+      // Kiểm tra kho (chỉ check các item được chọn)
+      const payloadToCheck = itemsToCheckout.map(item => ({
           productId: item.product._id,
           quantity: item.quantity
-        }));
-        response = await api.post('/cart/check-stock', { items: payload });
+      }));
+
+      if (isLoggedIn) {
+         // Với user, backend cần biết check cái gì. 
+         // Chúng ta cần sửa API check-stock hoặc gửi payload lên
+         // Để đơn giản, ta gửi payload lên (backend checkStock đã hỗ trợ nhận body)
+         response = await api.post('/cart/check-stock', { items: payloadToCheck });
+      } else {
+         response = await api.post('/cart/check-stock', { items: payloadToCheck });
       }
 
-      // Nếu API trả về success: true
       if (response.data.success) {
         navigate('/checkout', { 
           state: { 
-            couponCode: coupon, // Gửi mã đã nhập
-            discount: cart.discount // Gửi số tiền đã giảm
+            couponCode: totals.discount > 0 ? coupon : '', 
+            discount: totals.discount,
+            // QUAN TRỌNG: Gửi danh sách item đã chọn sang checkout
+            selectedItems: itemsToCheckout 
           } 
         });
       }
-      
     } catch (err) {
-      // Nếu API trả về lỗi 400 (hết hàng)
-      toast(err.response?.data?.msg || 'Không thể thanh toán. Vui lòng thử lại.');
+      toast.error(err.response?.data?.msg || 'Không thể thanh toán.');
     }
   };
 
-  // 6. SỬA LẠI KEY VÀ ID SẢN PHẨM
   return (
     <div className="container my-4">
-      {/* Hiển thị số lượng từ state, không phải cart.items.length */}
-      <h2>Giỏ hàng ({cart.items.reduce((sum, item) => sum + item.quantity, 0)})</h2>
+      <h2>Giỏ hàng ({cartItems.reduce((sum, item) => sum + item.quantity, 0)})</h2>
       <div className="row">
         <div className="col-md-8">
-          {cart.items.map(item => (
-            // Key và ID phải dùng product._id
-            <div key={item.product._id} className="card mb-3"> 
-              <div className="card-body d-flex align-items-center">
-                <input type="checkbox" className="me-3" checked />
-                <img src={item.product.images[0]} alt={item.product.name} style={{ width: '80px' }} className="me-3" />
-                <div className="flex-grow-1">
-                  <h6>{item.product.name}</h6>
-                  <p className="text-muted">SKU: {item.product.sku || 'N/A'}</p>
-                  <p className="text-primary">{item.product.price.toLocaleString()}đ</p>
-                </div>
-                <div className="d-flex align-items-center me-3">
-                  <button className="btn btn-sm btn-outline-secondary" onClick={() => updateQuantity(item.product._id, item.quantity - 1)}>-</button>
-                  <span className="mx-2">{item.quantity}</span>
-                  <button className="btn btn-sm btn-outline-secondary" onClick={() => updateQuantity(item.product._id, item.quantity + 1)}>+</button>
-                </div>
-                <h6 className="me-3">{(item.product.price * item.quantity).toLocaleString()}đ</h6>
-                <button className="btn btn-sm btn-outline-danger" onClick={() => removeItem(item.product._id)}>Xóa</button>
-              </div>
+          {/* CHECKBOX CHỌN TẤT CẢ */}
+          {cartItems.length > 0 && (
+            <div className="form-check mb-3 ps-4">
+              <input 
+                className="form-check-input" 
+                type="checkbox" 
+                id="selectAll"
+                checked={selectedItems.length === cartItems.length && cartItems.length > 0}
+                onChange={handleSelectAll}
+              />
+              <label className="form-check-label fw-bold" htmlFor="selectAll">
+                Chọn tất cả ({cartItems.length} sản phẩm)
+              </label>
             </div>
-          ))}
-        </div>
+          )}
 
-        {/* ... (Phần thanh toán giữ nguyên) ... */}
+          {cartItems.length === 0 ? (
+            <div className="text-center p-5">
+              <p>Giỏ hàng của bạn đang trống.</p>
+              <Link to="/" className="btn btn-primary">Tiếp tục mua sắm</Link>
+            </div>
+          ) : (
+            cartItems.map(item => (
+              <div key={item.product._id} className="card mb-3"> 
+                <div className="card-body d-flex align-items-center">
+                  {/* CHECKBOX TỪNG SẢN PHẨM */}
+                  <input 
+                    type="checkbox" 
+                    className="me-3 form-check-input" 
+                    checked={selectedItems.includes(item.product._id)}
+                    onChange={() => handleSelectItem(item.product._id)}
+                  />
+                  {/* ... */}
+                  <img src={item.product.images[0]} alt={item.product.name} style={{ width: '80px' }} className="me-3" />
+                  <div className="flex-grow-1">
+                    <h6>{item.product.name}</h6>
+                    {/* <p className="text-muted">SKU: {item.product.sku || 'N/A'}</p> */}
+                    <p className="text-primary">{item.product.price.toLocaleString()}đ</p>
+                  </div>
+                  <div className="d-flex align-items-center me-3">
+                    <button className="btn btn-sm btn-outline-secondary" onClick={() => updateQuantity(item.product._id, item.quantity - 1)}>-</button>
+                    <span className="mx-2">{item.quantity}</span>
+                    <button className="btn btn-sm btn-outline-secondary" onClick={() => updateQuantity(item.product._id, item.quantity + 1)}>+</button>
+                  </div>
+                  <h6 className="me-3">{(item.product.price * item.quantity).toLocaleString()}đ</h6>
+                  <button className="btn btn-sm btn-outline-danger" onClick={() => removeItem(item.product._id)}>Xóa</button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+        
         <div className="col-md-4">
           <div className="card">
             <div className="card-header">Thanh toán</div>
@@ -227,66 +303,48 @@ const Cart = () => {
                 />
                 <button className="btn btn-outline-primary" onClick={applyCoupon}>Áp dụng</button>
               </div>
-              <button 
-                className="btn btn-link p-0 text-decoration-none mb-3"
-                onClick={fetchCoupons}
-              >
+              <button className="btn btn-link p-0 text-decoration-none mb-3" onClick={fetchCoupons}>
                 <i className="bi bi-tags-fill me-1"></i>Xem mã giảm giá có sẵn
               </button>
 
-              {error && <p className="text-danger">{error}</p>}
+              {error && <p className="text-danger small">{error}</p>}
               <ul className="list-group list-group-flush">
-                <li className="list-group-item d-flex justify-content-between"><span>Tạm tính</span><span>{cart.subtotal.toLocaleString()}đ</span></li>
-                <li className="list-group-item d-flex justify-content-between text-success"><span>Giảm giá</span><span>- {cart.discount.toLocaleString()}đ</span></li>
-                <li className="list-group-item d-flex justify-content-between"><span>Thuế VAT</span><span>{cart.tax.toLocaleString()}đ</span></li>
-                <li className="list-group-item d-flex justify-content-between"><span>Phí vận chuyển</span><span>{cart.shipping.toLocaleString()}đ</span></li>
-                <li className="list-group-item d-flex justify-content-between fw-bold"><span>Thành tiền</span><span className="text-primary">{cart.total.toLocaleString()}đ</span></li>
+                <li className="list-group-item d-flex justify-content-between"><span>Tạm tính</span><span>{totals.subtotal.toLocaleString()}đ</span></li>
+                <li className="list-group-item d-flex justify-content-between text-success"><span>Giảm giá</span><span>- {totals.discount.toLocaleString()}đ</span></li>
+                <li className="list-group-item d-flex justify-content-between"><span>Thuế VAT</span><span>{totals.tax.toLocaleString()}đ</span></li>
+                <li className="list-group-item d-flex justify-content-between"><span>Phí vận chuyển</span><span>{totals.shipping.toLocaleString()}đ</span></li>
+                <li className="list-group-item d-flex justify-content-between fw-bold"><span>Thành tiền</span><span className="text-primary">{totals.total.toLocaleString()}đ</span></li>
               </ul>
-              {/* <Link to="/checkout" className="btn btn-primary w-100 mt-3">TIẾP TỤC</Link> */}
               <button 
                 onClick={handleCheckout} 
                 className="btn btn-primary w-100 mt-3"
-                disabled={cart.items.length === 0} // Vô hiệu hóa nếu giỏ trống
+                disabled={selectedItems.length === 0} // Disable nếu không chọn gì
               >
-                TIẾP TỤC
+                TIẾP TỤC ({selectedItems.length})
               </button>
 
             </div>
           </div>
         </div>
       </div>
-      {/* === MODAL DANH SÁCH MÃ GIẢM GIÁ === */}
+      
+      {/* MODAL DANH SÁCH MÃ GIẢM GIÁ (Giữ nguyên) */}
       <Modal show={showCouponModal} onHide={() => setShowCouponModal(false)}>
-        <Modal.Header closeButton>
-          <Modal.Title>Mã giảm giá dành cho bạn</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          <ListGroup variant="flush">
+         {/* ... */}
+         <Modal.Header closeButton><Modal.Title>Mã giảm giá</Modal.Title></Modal.Header>
+         <Modal.Body>
+           <ListGroup variant="flush">
             {availableCoupons.map(cp => (
               <ListGroup.Item key={cp._id} action onClick={() => handleSelectCoupon(cp.code)}>
-                <div className="d-flex justify-content-between align-items-center">
-                  <div>
-                    <h6 className="mb-1 text-primary fw-bold">{cp.code}</h6>
-                    <small className="text-muted">
-                      Giảm {cp.type === 'percent' ? `${cp.value}%` : `${cp.value.toLocaleString()}đ`}
-                      {cp.minOrderValue > 0 && ` cho đơn từ ${cp.minOrderValue.toLocaleString()}đ`}
-                    </small>
-                    <br/>
-                    <small className="text-muted">
-                      Áp dụng: {cp.applicableCategories.length === 0 
-                        ? 'Tất cả sản phẩm' 
-                        : cp.applicableCategories.map(c => c.name).join(', ')}
-                    </small>
-                  </div>
-                  <Badge bg="success" pill>Dùng ngay</Badge>
-                </div>
+                 <div className="d-flex justify-content-between">
+                    <div>
+                      <strong>{cp.code}</strong> - Giảm {cp.type === 'percent' ? `${cp.value}%` : `${cp.value.toLocaleString()}đ`}
+                    </div>
+                 </div>
               </ListGroup.Item>
             ))}
-            {availableCoupons.length === 0 && (
-              <p className="text-center text-muted my-3">Hiện không có mã giảm giá nào.</p>
-            )}
-          </ListGroup>
-        </Modal.Body>
+           </ListGroup>
+         </Modal.Body>
       </Modal>
     </div>
   );

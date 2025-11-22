@@ -1,8 +1,9 @@
 // src/pages/Profile.js
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
+import { toast } from 'react-toastify';
 
-// === TẠO COMPONENT MỚI CHO ĐỔI MẬT KHẨU ===
+// ... (Giữ nguyên ChangePasswordForm) ...
 const ChangePasswordForm = () => {
   const [passwords, setPasswords] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' });
   const [message, setMessage] = useState('');
@@ -25,13 +26,12 @@ const ChangePasswordForm = () => {
     }
 
     try {
-      // (API này đã tồn tại trong userRoutes.js)
       const { data } = await api.put('/profile/password', {
         oldPassword: passwords.oldPassword,
         newPassword: passwords.newPassword
       });
       setMessage(data.msg);
-      setPasswords({ oldPassword: '', newPassword: '', confirmPassword: '' }); // Reset form
+      setPasswords({ oldPassword: '', newPassword: '', confirmPassword: '' }); 
     } catch (err) {
       setError(err.response?.data?.msg || 'Lỗi cập nhật');
     }
@@ -89,15 +89,17 @@ const Profile = () => {
   const [profile, setProfile] = useState({ name: '', email: '', addresses: [], loyaltyPoints: 0 });
   const [loading, setLoading] = useState(true);
   
-  // State cho việc chỉnh sửa
   const [editName, setEditName] = useState('');
-  const [newAddress, setNewAddress] = useState({ fullName: '', phone: '', addressLine: '' });
+  
+  // State dùng chung cho Thêm và Sửa
+  const [addressForm, setAddressForm] = useState({ fullName: '', phone: '', addressLine: '' });
+  const [editingAddressId, setEditingAddressId] = useState(null); // ID đang sửa (null = thêm mới)
 
   const fetchProfile = async () => {
     try {
       const { data } = await api.get('/profile');
       setProfile(data);
-      setEditName(data.name); // Đặt tên ban đầu
+      setEditName(data.name);
     } catch (err) {
       console.error('Lỗi tải hồ sơ');
     } finally {
@@ -109,40 +111,80 @@ const Profile = () => {
     fetchProfile();
   }, []);
 
-  // HÀM: Cập nhật tên
   const handleUpdateName = async (e) => {
     e.preventDefault();
     try {
       await api.put('/profile', { name: editName });
-      alert('Cập nhật tên thành công!');
-      fetchProfile(); // Tải lại
+      toast.success('Cập nhật tên thành công!');
+      fetchProfile();
     } catch (err) {
-      alert('Lỗi cập nhật tên');
+      toast.error('Lỗi cập nhật tên');
     }
   };
 
-  // HÀM: Thêm địa chỉ
-  const handleAddAddress = async (e) => {
+  // === HÀM: CHUẨN BỊ SỬA ===
+  const handleEditClick = (addr) => {
+    setAddressForm({
+      fullName: addr.fullName,
+      phone: addr.phone,
+      addressLine: addr.addressLine
+    });
+    setEditingAddressId(addr._id); // Chuyển sang chế độ sửa
+    // Cuộn xuống form (UX)
+    const formElement = document.getElementById('address-form-anchor');
+    if (formElement) formElement.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  // === HÀM: HỦY SỬA ===
+  const handleCancelEdit = () => {
+    setAddressForm({ fullName: '', phone: '', addressLine: '' });
+    setEditingAddressId(null);
+  };
+
+  // === HÀM: XỬ LÝ SUBMIT (THÊM HOẶC SỬA) ===
+  const handleAddressSubmit = async (e) => {
     e.preventDefault();
     try {
-      await api.post('/profile/address', newAddress);
-      alert('Thêm địa chỉ thành công!');
-      setNewAddress({ fullName: '', phone: '', addressLine: '' }); // Reset form
-      fetchProfile(); // Tải lại
+      if (editingAddressId) {
+        // API PUT (Cập nhật)
+        await api.put(`/profile/address/${editingAddressId}`, addressForm);
+        toast.success('Cập nhật địa chỉ thành công!');
+      } else {
+        // API POST (Thêm mới)
+        await api.post('/profile/address', addressForm);
+        toast.success('Thêm địa chỉ thành công!');
+      }
+      handleCancelEdit(); // Reset form
+      fetchProfile(); // Tải lại dữ liệu
     } catch (err) {
-      alert('Lỗi thêm địa chỉ');
+      toast.error(err.response?.data?.msg || 'Lỗi xử lý địa chỉ');
     }
   };
 
-  // HÀM: Xóa địa chỉ
+  // === HÀM: ĐẶT LÀM MẶC ĐỊNH ===
+  const handleSetDefault = async (addr) => {
+    try {
+      // Gọi API update với isDefault = true
+      // Backend sẽ tự động set false cho các địa chỉ còn lại
+      await api.put(`/profile/address/${addr._id}`, { 
+        ...addr, // Giữ nguyên thông tin cũ
+        isDefault: true 
+      });
+      toast.success('Đã đặt làm địa chỉ mặc định');
+      fetchProfile();
+    } catch (err) {
+      toast.error('Lỗi cập nhật mặc định');
+    }
+  };
+
   const handleDeleteAddress = async (addressId) => {
     if (window.confirm('Bạn có chắc muốn xóa địa chỉ này?')) {
       try {
         await api.delete(`/profile/address/${addressId}`);
-        alert('Xóa thành công!');
-        fetchProfile(); // Tải lại
+        toast.success('Xóa thành công!');
+        fetchProfile();
       } catch (err) {
-        alert('Lỗi xóa địa chỉ');
+        toast.error('Lỗi xóa địa chỉ');
       }
     }
   };
@@ -152,7 +194,7 @@ const Profile = () => {
   return (
     <div className="container mt-4">
       <div className="row">
-        {/* === CỘT TRÁI (THÔNG TIN) === */}
+        {/* CỘT TRÁI */}
         <div className="col-md-4">
           <div className="card">
             <div className="card-body text-center">
@@ -165,17 +207,15 @@ const Profile = () => {
             <div className="card-body text-center">
               <h5 className="text-muted">Điểm thân thiết</h5>
               <h3 className="text-success fw-bold">{profile.loyaltyPoints.toLocaleString()} điểm</h3>
-              {/* SỬA LỖI TÍNH ĐIỂM: 1 điểm = 1000đ */}
               <small>(Tương đương {(profile.loyaltyPoints * 1000).toLocaleString()} VND)</small>
             </div>
           </div>
-          {/* === THÊM CARD ĐỔI MẬT KHẨU === */}
           <ChangePasswordForm />
         </div>
 
-        {/* === CỘT PHẢI (QUẢN LÝ) === */}
+        {/* CỘT PHẢI */}
         <div className="col-md-8">
-          {/* CẬP NHẬT HỌ TÊN */}
+          {/* THÔNG TIN TÀI KHOẢN */}
           <div className="card mb-4">
             <div className="card-body">
               <h4>Thông tin tài khoản</h4>
@@ -198,55 +238,107 @@ const Profile = () => {
             </div>
           </div>
 
-          {/* QUẢN LÝ ĐỊA CHỈ */}
+          {/* SỔ ĐỊA CHỈ */}
           <div className="card">
             <div className="card-body">
-              <h4>Sổ địa chỉ</h4>
+              <div className="d-flex justify-content-between align-items-center mb-3">
+                <h4>Sổ địa chỉ</h4>
+                {/* Nút tắt nhanh để nhảy xuống form thêm mới */}
+                <button className="btn btn-sm btn-outline-primary" onClick={() => {
+                    handleCancelEdit();
+                    document.getElementById('address-form-anchor').scrollIntoView({ behavior: 'smooth' });
+                }}>
+                    + Thêm mới
+                </button>
+              </div>
               <hr />
-              {/* DANH SÁCH ĐỊA CHỈ */}
+              
+              {/* DANH SÁCH */}
               {profile.addresses.map((addr) => (
-                <div key={addr._id} className="card bg-light p-3 mb-2">
-                  <div className="d-flex justify-content-between">
+                <div key={addr._id} className={`card p-3 mb-3 ${addr.isDefault ? 'border-success' : 'bg-light'}`}>
+                  <div className="d-flex justify-content-between align-items-start">
                     <div>
                       <strong>{addr.fullName}</strong> | {addr.phone}
-                      <p className="mb-0 text-muted">{addr.addressLine}</p>
+                      <p className="mb-1 text-muted">{addr.addressLine}</p>
+                      
+                      {addr.isDefault ? (
+                        <span className="badge bg-success">Mặc định</span>
+                      ) : (
+                        <button 
+                            className="btn btn-link p-0 text-decoration-none small"
+                            onClick={() => handleSetDefault(addr)}
+                        >
+                            Đặt làm mặc định
+                        </button>
+                      )}
                     </div>
-                    <button 
-                      className="btn btn-sm btn-outline-danger"
-                      onClick={() => handleDeleteAddress(addr._id)}
-                    >
-                      Xóa
-                    </button>
+                    
+                    <div className="d-flex gap-2">
+                      <button 
+                        className="btn btn-sm btn-outline-primary"
+                        onClick={() => handleEditClick(addr)}
+                      >
+                        <i className="bi bi-pencil"></i> Sửa
+                      </button>
+                      <button 
+                        className="btn btn-sm btn-outline-danger"
+                        onClick={() => handleDeleteAddress(addr._id)}
+                      >
+                        <i className="bi bi-trash"></i> Xóa
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
               
-              {/* THÊM ĐỊA CHỈ MỚI */}
-              <h5 className="mt-4">Thêm địa chỉ mới</h5>
-              <form onSubmit={handleAddAddress}>
-                <input 
-                  className="form-control mb-2" 
-                  placeholder="Họ tên" 
-                  value={newAddress.fullName} 
-                  onChange={(e) => setNewAddress({...newAddress, fullName: e.target.value})} 
-                  required 
-                />
-                <input 
-                  className="form-control mb-2" 
-                  placeholder="Số điện thoại" 
-                  value={newAddress.phone} 
-                  onChange={(e) => setNewAddress({...newAddress, phone: e.target.value})} 
-                  required 
-                />
-                <textarea 
-                  className="form-control mb-2" 
-                  placeholder="Địa chỉ chi tiết" 
-                  value={newAddress.addressLine} 
-                  onChange={(e) => setNewAddress({...newAddress, addressLine: e.target.value})} 
-                  required 
-                />
-                <button type="submit" className="btn btn-success">Thêm địa chỉ</button>
-              </form>
+              {/* FORM NHẬP LIỆU */}
+              <div id="address-form-anchor" className="mt-4 pt-3 border-top">
+                <h5>{editingAddressId ? 'Cập nhật địa chỉ' : 'Thêm địa chỉ mới'}</h5>
+                <form onSubmit={handleAddressSubmit}>
+                    <div className="row">
+                        <div className="col-md-6 mb-3">
+                            <label className="form-label">Họ tên người nhận</label>
+                            <input 
+                              className="form-control" 
+                              value={addressForm.fullName} 
+                              onChange={(e) => setAddressForm({...addressForm, fullName: e.target.value})} 
+                              required 
+                            />
+                        </div>
+                        <div className="col-md-6 mb-3">
+                            <label className="form-label">Số điện thoại</label>
+                            <input 
+                              className="form-control" 
+                              value={addressForm.phone} 
+                              onChange={(e) => setAddressForm({...addressForm, phone: e.target.value})} 
+                              required 
+                            />
+                        </div>
+                    </div>
+                    <div className="mb-3">
+                        <label className="form-label">Địa chỉ chi tiết</label>
+                        <textarea 
+                          className="form-control" 
+                          rows="2"
+                          value={addressForm.addressLine} 
+                          onChange={(e) => setAddressForm({...addressForm, addressLine: e.target.value})} 
+                          required 
+                        />
+                    </div>
+                    
+                    <div className="d-flex gap-2">
+                        <button type="submit" className={`btn ${editingAddressId ? 'btn-warning' : 'btn-success'}`}>
+                            {editingAddressId ? 'Lưu cập nhật' : 'Thêm địa chỉ'}
+                        </button>
+                        {editingAddressId && (
+                            <button type="button" className="btn btn-secondary" onClick={handleCancelEdit}>
+                                Hủy bỏ
+                            </button>
+                        )}
+                    </div>
+                </form>
+              </div>
+
             </div>
           </div>
         </div>

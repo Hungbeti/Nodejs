@@ -1,44 +1,43 @@
 // backend/middleware/auth.js
 const jwt = require('jsonwebtoken');
-const User = require('../models/User'); // <-- 1. IMPORT USER MODEL
+const User = require('../models/User');
 
-const protect = async (req, res, next) => { // <-- 2. THÊM 'async'
+const protect = async (req, res, next) => {
   let token;
 
-  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+  if (
+    req.headers.authorization &&
+    req.headers.authorization.startsWith('Bearer')
+  ) {
     try {
       token = req.headers.authorization.split(' ')[1];
       const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret');
 
-      // 3. SỬA LỖI: Dùng ID từ token để TÌM user trong CSDL
-      req.user = await User.findById(decoded._id).select('-password');
-      // ===================================================
-
-      if (!req.user) {
-        return res.status(401).json({ msg: 'Không tìm thấy người dùng' });
+      const user = await User.findById(decoded._id).select('-password');
+      if (!user) {
+        return res.status(401).json({ msg: 'Người dùng không tồn tại' });
       }
 
-      // 4. (Giữ lại) Kiểm tra tài khoản
-      if (req.user.isActive === false) { 
-         return res.status(403).json({ msg: 'Tài khoản đã bị khóa' });
+      if (!user.isActive) {
+        return res.status(403).json({ msg: 'Tài khoản đã bị khóa' });
       }
 
-      next();
+      req.user = user;
+      return next();
     } catch (err) {
-      res.status(401).json({ msg: 'Token không hợp lệ' });
+      return res.status(401).json({ msg: 'Token không hợp lệ hoặc đã hết hạn' });
     }
   }
 
-  if (!token) {
-    res.status(401).json({ msg: 'Không có token' });
-  }
+  // Nếu không có token → trả JSON, KHÔNG redirect!
+  return res.status(401).json({ msg: 'Không có quyền truy cập (thiếu token)' });
 };
 
 const admin = (req, res, next) => {
   if (req.user && req.user.role === 'admin') {
     next();
   } else {
-    res.status(403).json({ msg: 'Không có quyền admin' });
+    res.status(403).json({ msg: 'Yêu cầu quyền Admin' });
   }
 };
 
