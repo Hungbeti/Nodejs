@@ -410,30 +410,69 @@ router.post('/', async (req, res) => {
     }
 
     // 10. GỬI EMAIL XÁC NHẬN
+    const loyaltyDiscount = loyaltyPointsUsedNum * 1000;
     const itemsHtml = validatedItems.map(item => 
       `<tr>
-        <td>${item.name}</td>
-        <td>${item.quantity}</td>
-        <td>${item.price.toLocaleString()}đ</td>
-        <td>${(item.price * item.quantity).toLocaleString()}đ</td>
+        <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
+            <img src="${item.image}" alt="sp" width="50" height="50" style="object-fit: cover; border-radius: 4px;" />
+        </td>
+        <td style="padding: 8px; border: 1px solid #ddd;">${item.name}</td>
+        <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${item.quantity}</td>
+        <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">${item.price.toLocaleString()}đ</td>
+        <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">${(item.price * item.quantity).toLocaleString()}đ</td>
       </tr>`
     ).join('');
+
+    // Tạo HTML cho các phần giảm giá (chỉ hiện nếu có)
+    let discountRows = '';
+    if (discount > 0) {
+        discountRows += `<p style="margin: 5px 0;">Giảm giá Voucher: <span style="color: green;">-${discount.toLocaleString()}đ</span></p>`;
+    }
+    if (loyaltyDiscount > 0) {
+        discountRows += `<p style="margin: 5px 0;">Điểm thân thiết: <span style="color: green;">-${loyaltyDiscount.toLocaleString()}đ</span></p>`;
+    }
+
+    // Nội dung email hoàn chỉnh
+    const emailContent = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+        <h2 style="color: #0d6efd;">Cảm ơn ${user.name} đã đặt hàng!</h2>
+        <p>Đơn hàng của bạn đã được tiếp nhận và đang được xử lý.</p>
+        <p><strong>Mã đơn hàng:</strong> #${order._id.toString().slice(-6)}</p>
+
+        <h4 style="border-bottom: 2px solid #eee; padding-bottom: 10px; margin-top: 20px;">Chi tiết đơn hàng:</h4>
+        <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+          <thead>
+            <tr style="background-color: #f8f9fa;">
+              <th style="padding: 10px; border: 1px solid #ddd;">Ảnh</th>
+              <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">Sản phẩm</th>
+              <th style="padding: 10px; border: 1px solid #ddd;">SL</th>
+              <th style="padding: 10px; border: 1px solid #ddd; text-align: right;">Đơn giá</th>
+              <th style="padding: 10px; border: 1px solid #ddd; text-align: right;">Thành tiền</th>
+            </tr>
+          </thead>
+          <tbody>${itemsHtml}</tbody>
+        </table>
+
+        <div style="margin-top: 20px; text-align: right;">
+           <p style="margin: 5px 0;">Tổng tiền hàng: <strong>${subtotal.toLocaleString()}đ</strong></p>
+           <p style="margin: 5px 0;">Phí vận chuyển: <strong>+${shippingFee.toLocaleString()}đ</strong></p>
+           <p style="margin: 5px 0;">Thuế (10%): <strong>+${tax.toLocaleString()}đ</strong></p>
+           ${discountRows}
+           <hr style="border: 0; border-top: 1px solid #eee; margin: 10px 0;" />
+           <h3 style="color: #d63384; margin: 10px 0;">Tổng thanh toán: ${total.toLocaleString()}đ</h3>
+        </div>
+        
+        <p style="margin-top: 30px; font-size: 12px; color: #666; text-align: center;">
+          Cảm ơn bạn đã mua sắm tại PC Shop!<br/>
+          Đây là email tự động, vui lòng không trả lời.
+        </p>
+      </div>
+    `;
 
     await sendEmail(
       user.email,
       `Xác nhận đơn hàng #${order._id.toString().slice(-6)}`,
-      `<h2>Cảm ơn ${user.name} đã đặt hàng!</h2>
-       <p>Đơn hàng của bạn đã được tiếp nhận.</p>
-       <p><strong>Mã đơn hàng:</strong> #${order._id.toString().slice(-6)}</p>
-       <p><strong>Tổng cộng:</strong> ${total.toLocaleString()}đ</p>
-       <h4>Chi tiết đơn hàng:</h4>
-       <table border="1" cellpadding="5" cellspacing="0">
-        <thead>
-          <tr><th>Sản phẩm</th><th>Số lượng</th><th>Đơn giá</th><th>Tổng</th></tr>
-        </thead>
-        <tbody>${itemsHtml}</tbody>
-       </table>
-       <p>Cảm ơn bạn đã mua sắm!</p>`
+      emailContent
     );
 
     // 11. TRẢ VỀ ĐƠN HÀNG

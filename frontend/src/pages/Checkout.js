@@ -167,7 +167,11 @@ const Checkout = () => {
         shippingAddress,
         paymentMethod: payment,
         couponCode: coupon || undefined, // Giữ nguyên, backend sẽ bỏ nếu undefined
+<<<<<<< HEAD
         usePoints: usePoints ? pointsToUse : 0
+=======
+        loyaltyPointsUsed: usePoints ? pointsToUse : 0
+>>>>>>> ca73fa2 (huy update l2)
       };
 
       console.log('Order data gửi đi:', orderData); // Debug
