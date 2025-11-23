@@ -229,12 +229,15 @@ router.post('/', async (req, res) => {
 
     // 2. XỬ LÝ TÀI KHOẢN (Nếu là khách)
     if (!user) {
-      const { email, name, addressLine, phone } = shipping; // Lấy phone và addressLine
-      if (!email || !name || !addressLine) {
+      const { email, name, phone, address, addressLine } = shipping; 
+      
+      // Xác định địa chỉ thực tế (ưu tiên cái nào có dữ liệu)
+      const finalAddress = address || addressLine;
+      if (!email || !name || !finalAddress) {
         return res.status(400).json({ msg: 'Vui lòng điền đầy đủ thông tin giao hàng' });
       }
       
-      let guest = await User.findOne({ email });
+      let guest = await User.findOne({ email });  
       if (!guest) {
         const tempPass = crypto.randomBytes(4).toString('hex');
         guest = new User({
@@ -243,7 +246,7 @@ router.post('/', async (req, res) => {
           addresses: [{ // Sử dụng cấu trúc địa chỉ mới
             fullName: name,
             phone: phone || '',
-            addressLine: addressLine,
+            addressLine: finalAddress,
             isDefault: true
           }],
           password: tempPass,
@@ -264,22 +267,17 @@ router.post('/', async (req, res) => {
       user = guest;
     }
 
-    // 3. LẤY VÀ XÁC THỰC GIỎ HÀNG
-    let cartItems = [];
-    let dbCart = null; 
-
-    if (token) { // Nếu user đã đăng nhập
-      dbCart = await Cart.findOne({ user: user._id });
-      if (!dbCart || dbCart.items.length === 0) {
-        return res.status(400).json({ msg: 'Giỏ hàng trống' });
-      }
-      cartItems = dbCart.items;
-    } else { // Nếu là khách
-      if (!guestCartItems || guestCartItems.length === 0) {
-        return res.status(400).json({ msg: 'Giỏ hàng trống' });
-      }
-      cartItems = guestCartItems.map(item => ({ product: item.productId, quantity: item.quantity }));
+    // 3. LẤY VÀ XÁC THỰC GIỎ HÀNG (luôn dùng từ body, không lấy full cart)
+    const { items: bodyItems } = req.body;
+    if (!bodyItems || bodyItems.length === 0) {
+      return res.status(400).json({ msg: 'Giỏ hàng trống' });
     }
+
+    // Chuyển bodyItems sang format { product: _id, quantity }
+    let cartItems = bodyItems.map(item => ({
+      product: item.product,
+      quantity: item.quantity
+    }));
 
     // 4. TÍNH TOÁN PHÍA SERVER VÀ CẬP NHẬT `sold`
     let subtotal = 0;
@@ -366,7 +364,7 @@ router.post('/', async (req, res) => {
         name: shipping.name,
         email: shipping.email,
         phone: shipping.phone || '', // Đảm bảo phone tồn tại
-        address: shipping.address || shipping.addressLine // Ánh xạ từ 'addressLine'
+        address: shipping.address || shipping.addressLine || '' // Ánh xạ từ 'addressLine'
       }, // Dùng shipping address từ form
       paymentMethod: payment,
       subtotal,
@@ -395,8 +393,20 @@ router.post('/', async (req, res) => {
       await coupon.save();
     }
 
-    if (dbCart) {
-      await dbCart.deleteOne();
+    // XÓA CHỈ CÁC SẢN PHẨM ĐÃ CHỌN KHỎI GIỎ HÀNG (nếu đăng nhập)
+    if (token) {
+      try {
+        const cart = await Cart.findOne({ user: user._id });
+        if (cart) {
+          const orderedProductIds = validatedItems.map(item => item.product.toString());
+          cart.items = cart.items.filter(
+            item => !orderedProductIds.includes(item.product.toString())
+          );
+          await cart.save();
+        }
+      } catch (err) {
+        console.error('Lỗi khi xóa sản phẩm khỏi giỏ hàng:', err);
+      }
     }
 
     // 10. GỬI EMAIL XÁC NHẬN
@@ -433,6 +443,18 @@ router.post('/', async (req, res) => {
     console.error("Lỗi nghiêm trọng khi tạo đơn hàng:", err);
     res.status(500).json({ msg: 'Lỗi server khi tạo đơn hàng' });
   }
+});
+
+router.post('/users/check-email', async (req, res) => {
+  const { email } = req.body;
+  const exists = await User.exists({ email });
+  res.json({ exists });
+});
+
+router.post('/users/check-phone', async (req, res) => {
+  const { phone } = req.body;
+  const exists = await User.exists({ 'addresses.phone': phone });
+  res.json({ exists });
 });
 
 // PATCH: Cập nhật trạng thái (admin)

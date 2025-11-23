@@ -176,43 +176,13 @@ exports.clearCart = async (req, res) => {
  * Tuyến này không 'protect' vì nó phải xử lý cả khách
  */
 exports.checkStock = async (req, res) => {
-  let cartItems = [];
-  let user = null;
+  const { items: cartItems } = req.body;  // Luôn lấy từ body (selectedItems từ frontend)
 
-  // 1. KIỂM TRA TOKEN (NẾU CÓ)
-  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-    try {
-      const token = req.headers.authorization.split(' ')[1];
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      user = await User.findById(decoded._id); // Giả sử User model đã được import
-    } catch (error) {
-      // Bỏ qua, coi như khách
-    }
+  if (!cartItems || cartItems.length === 0) {
+    return res.status(400).json({ msg: 'Không có sản phẩm để kiểm tra' });
   }
-  
-  try {
-    // 2. LẤY GIỎ HÀNG
-    if (user) {
-      // Lấy giỏ hàng từ CSDL
-      const cart = await Cart.findOne({ user: user._id });
-      if (!cart || cart.items.length === 0) {
-        return res.status(400).json({ msg: 'Giỏ hàng trống' });
-      }
-      cartItems = cart.items;
-    } else {
-      // Lấy giỏ hàng của khách từ req.body
-      const { items: guestCartPayload } = req.body;
-      if (!guestCartPayload || guestCartPayload.length === 0) {
-        return res.status(400).json({ msg: 'Giỏ hàng trống' });
-      }
-      // Chuyển đổi để giống format { product: 'id', quantity: num }
-      cartItems = guestCartPayload.map(item => ({ 
-        product: item.productId, 
-        quantity: item.quantity 
-      }));
-    }
 
-    // 3. KIỂM TRA TỒN KHO
+  try {
     for (const item of cartItems) {
       const product = await Product.findById(item.product);
       
@@ -221,16 +191,13 @@ exports.checkStock = async (req, res) => {
       }
       
       if (product.stock < item.quantity) {
-        // HẾT HÀNG
         return res.status(400).json({ 
           msg: `Sản phẩm "${product.name}" không đủ hàng (chỉ còn ${product.stock} sản phẩm).` 
         });
       }
     }
 
-    // 4. THÀNH CÔNG
     res.status(200).json({ success: true, msg: 'Tất cả sản phẩm đều đủ hàng' });
-
   } catch (err) {
     console.error(err);
     res.status(500).json({ msg: 'Lỗi server khi kiểm tra kho' });

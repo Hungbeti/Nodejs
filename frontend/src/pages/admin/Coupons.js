@@ -198,7 +198,7 @@ const Coupons = () => {
           <thead className="table-light">
             <tr>
               <th>Mã</th>
-              {/* <th>Loại giảm</th> */}
+              <th>Loại giảm</th>
               <th>Giá trị</th>
               <th>Đơn tối thiểu</th>
               <th>Áp dụng cho</th>
@@ -212,7 +212,7 @@ const Coupons = () => {
             {coupons.map(coupon => (
               <tr key={coupon._id}>
                 <td><Badge bg="info" className="fs-6">{coupon.code}</Badge></td>
-                {/* <td>{coupon.type === 'percent' ? 'Phần trăm (%)' : 'Số tiền cố định'}</td> */}
+                <td>{coupon.type === 'percent' ? 'Phần trăm (%)' : 'Số tiền cố định'}</td>
                 <td className="fw-bold text-success">
                   {coupon.type === 'percent' ? `${coupon.value}%` : `${coupon.value.toLocaleString()}đ`}
                 </td>

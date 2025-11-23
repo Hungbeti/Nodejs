@@ -192,43 +192,31 @@ const Cart = () => {
   };
   
   const handleCheckout = async () => {
-    if (selectedItems.length === 0) {
-      toast.warn('Vui lòng chọn ít nhất 1 sản phẩm để thanh toán.');
-      return;
+    const itemsToCheck = cartItems
+      .filter(item => selectedItems.includes(item.product._id))
+      .map(item => ({
+        product: item.product._id,  // Chỉ gửi _id và quantity
+        quantity: item.quantity
+      }));
+
+    if (itemsToCheck.length === 0) {
+      return toast.error('Vui lòng chọn ít nhất 1 sản phẩm');
     }
 
     try {
-      // Lọc ra items để gửi đi
-      const itemsToCheckout = cartItems.filter(item => selectedItems.includes(item.product._id));
-
-      let response;
-      // Kiểm tra kho (chỉ check các item được chọn)
-      const payloadToCheck = itemsToCheckout.map(item => ({
-          productId: item.product._id,
-          quantity: item.quantity
-      }));
-
-      if (isLoggedIn) {
-         // Với user, backend cần biết check cái gì. 
-         // Chúng ta cần sửa API check-stock hoặc gửi payload lên
-         // Để đơn giản, ta gửi payload lên (backend checkStock đã hỗ trợ nhận body)
-         response = await api.post('/cart/check-stock', { items: payloadToCheck });
-      } else {
-         response = await api.post('/cart/check-stock', { items: payloadToCheck });
-      }
-
-      if (response.data.success) {
+      const res = await api.post('/cart/check-stock', { items: itemsToCheck });
+      if (res.data.success) {
+        // Tiếp tục sang checkout
         navigate('/checkout', { 
           state: { 
-            couponCode: totals.discount > 0 ? coupon : '', 
-            discount: totals.discount,
-            // QUAN TRỌNG: Gửi danh sách item đã chọn sang checkout
-            selectedItems: itemsToCheckout 
+            selectedItems: cartItems.filter(item => selectedItems.includes(item.product._id)),
+            couponCode: coupon,
+            discount: totals.discount 
           } 
         });
       }
     } catch (err) {
-      toast.error(err.response?.data?.msg || 'Không thể thanh toán.');
+      toast.error(err.response?.data?.msg || 'Lỗi kiểm tra hàng tồn kho');
     }
   };
 
@@ -331,20 +319,76 @@ const Cart = () => {
       {/* MODAL DANH SÁCH MÃ GIẢM GIÁ (Giữ nguyên) */}
       <Modal show={showCouponModal} onHide={() => setShowCouponModal(false)}>
          {/* ... */}
-         <Modal.Header closeButton><Modal.Title>Mã giảm giá</Modal.Title></Modal.Header>
-         <Modal.Body>
-           <ListGroup variant="flush">
-            {availableCoupons.map(cp => (
-              <ListGroup.Item key={cp._id} action onClick={() => handleSelectCoupon(cp.code)}>
-                 <div className="d-flex justify-content-between">
-                    <div>
-                      <strong>{cp.code}</strong> - Giảm {cp.type === 'percent' ? `${cp.value}%` : `${cp.value.toLocaleString()}đ`}
+        <Modal.Header closeButton><Modal.Title>Mã giảm giá</Modal.Title></Modal.Header>
+        <Modal.Body>
+          <ListGroup variant="flush">
+            {availableCoupons
+              .filter(cp => cp.uses < cp.maxUses)
+              .map(cp => (
+                <ListGroup.Item 
+                  key={cp._id} 
+                  action 
+                  onClick={() => handleSelectCoupon(cp.code)}
+                  className="d-flex justify-content-between align-items-start"
+                >
+                  <div>
+                    <strong>{cp.code}</strong> - 
+                    <span className="text-danger ms-1">
+                      Giảm {cp.type === 'percent' ? `${cp.value}%` : `${cp.value.toLocaleString()}đ`}
+                    </span>
+
+                    <div className="text-muted small mt-2">
+                      <div>
+                        <strong>Đơn tối thiểu:</strong> {cp.minOrderValue.toLocaleString()}đ
+                      </div>
+                      <div>
+                        <strong>Số lần dùng còn lại:</strong> {cp.maxUses - cp.uses}/{cp.maxUses}
+                      </div>
+                      
+                      {/* Chỉ hiển thị "Áp dụng cho" nếu có danh mục cụ thể */}
+                      {cp.applicableCategories && cp.applicableCategories.length > 0 && (
+                        <div>
+                          <strong>Áp dụng cho:</strong>{' '}
+                          {Array.isArray(cp.applicableCategories)
+                            ? cp.applicableCategories
+                                .map(cat => (typeof cat === 'object' ? cat.name : cat))
+                                .filter(Boolean)
+                                .join(', ') || 'Không xác định'
+                            : 'Tất cả'}
+                        </div>
+                      )}
+                      
+                      {/* Không hiển thị HSD nếu không có expiryDate hoặc là null/undefined */}
+                      {cp.expiryDate && (
+                        <div>
+                          <strong>Hết hạn:</strong>{' '}
+                          {new Date(cp.expiryDate).toLocaleDateString('vi-VN')}
+                        </div>
+                      )}
                     </div>
-                 </div>
-              </ListGroup.Item>
-            ))}
-           </ListGroup>
-         </Modal.Body>
+                  </div>
+
+                  <Button 
+                    variant="outline-success" 
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation(); // Ngăn click toàn item
+                      handleSelectCoupon(cp.code);
+                    }}
+                  >
+                    Áp dụng
+                  </Button>
+                </ListGroup.Item>
+              ))
+            }
+            
+            {availableCoupons.filter(cp => cp.uses < cp.maxUses).length === 0 && (
+              <div className="text-center text-muted py-4">
+                Không có mã giảm giá nào khả dụng lúc này
+              </div>
+            )}
+          </ListGroup>
+        </Modal.Body>
       </Modal>
     </div>
   );
