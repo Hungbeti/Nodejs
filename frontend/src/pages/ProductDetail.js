@@ -16,19 +16,24 @@ const ProductDetail = () => {
   const { id } = useParams();
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [mainImage, setMainImage] = useState(0); // Index của ảnh chính
+  const [mainImage, setMainImage] = useState(0); 
   
+  // STATE CHỌN BIẾN THỂ (MỚI)
+  const [selectedVariant, setSelectedVariant] = useState(null);
+
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
   const [guestName, setGuestName] = useState('');
   
   const { addToCart } = useCart();
-  const { isLoggedIn, user } = useAuth();
+  const { isLoggedIn } = useAuth();
 
   const fetchProduct = async () => {
     try {
       const { data } = await api.get(`/products/${id}`);
       setProduct(data);
+      // Mặc định chọn biến thể đầu tiên nếu còn hàng (Tuỳ chọn)
+      // if(data.variants && data.variants.length > 0) setSelectedVariant(data.variants[0]);
       setLoading(false);
     } catch (err) {
       console.error('Lỗi tải sản phẩm:', err);
@@ -38,42 +43,35 @@ const ProductDetail = () => {
 
   useEffect(() => {
     fetchProduct();
-
-    // --- LOGIC SOCKET ---
-    // 1. Tham gia phòng
-    console.log('Socket: Đang tham gia phòng', id);
     socket.emit('joinProductRoom', id);
-
-    // 2. Lắng nghe sự kiện
     const handleNewReview = (newReview) => {
-      console.log('Socket: Đã nhận bình luận mới!', newReview);
-      
       setProduct((prevProduct) => {
-        // Nếu sản phẩm chưa tải xong, không làm gì
         if (!prevProduct) return prevProduct;
-
-        // Tạo bản sao an toàn và thêm review mới
-        return {
-          ...prevProduct,
-          reviews: [...(prevProduct.reviews || []), newReview]
-        };
+        return { ...prevProduct, reviews: [...(prevProduct.reviews || []), newReview] };
       });
     };
-
     socket.on('newReview', handleNewReview);
-
-    // 3. Dọn dẹp
-    return () => {
-      socket.off('newReview', handleNewReview);
-    };
+    return () => { socket.off('newReview', handleNewReview); };
   }, [id]);
 
   const handleAddToCart = async () => {
+    if (!selectedVariant) return toast.error('Vui lòng chọn phiên bản!');
     try {
-      await addToCart(product, 1);
-      toast.success('Thêm vào giỏ thành công!');
+      const productToAdd = {
+        _id: product._id + '-' + selectedVariant._id, // Tạo ID duy nhất cho item (productId-variantId)
+        product: product._id,
+        name: product.name,
+        images: product.images,
+        price: selectedVariant.price,
+        variantId: selectedVariant._id,
+        variantName: selectedVariant.name,
+        quantity: 1
+      };
+      
+      await addToCart(productToAdd, 1);
+      toast.success('Thêm thành công!');
     } catch (err) {
-      toast.error('Lỗi: ' + (err.response?.data?.msg || err.message));
+      toast.error(err.response?.data?.msg || 'Lỗi thêm');
     }
   };
 
@@ -107,25 +105,13 @@ const ProductDetail = () => {
       toast.error('Lỗi gửi bình luận');
     }
   };
-  
-  // const submitReview = async (e) => {
-  //   e.preventDefault();
-  //   if (!comment || !rating) {
-  //     return toast('Vui lòng nhập đủ đánh giá và bình luận');
-  //   }
-  //   try {
-  //     await api.post(`/products/${id}/reviews`, { rating, comment });
-  //     toast('Gửi đánh giá thành công!');
-  //     fetchProduct(); // Tải lại sản phẩm để xem review mới
-  //     setComment('');
-  //     setRating(5);
-  //   } catch (err) {
-  //     toast('Lỗi gửi đánh giá: ' + (err.response?.data?.msg || 'Lỗi server'));
-  //   }
-  // };
 
   if (loading) return <div className="text-center mt-5">Đang tải...</div>;
   if (!product) return <div className="text-center mt-5">Không tìm thấy sản phẩm.</div>;
+  
+  // Lấy giá và stock để hiển thị dựa trên selection
+  const currentPrice = selectedVariant ? selectedVariant.price : product.price;
+  const currentStock = selectedVariant ? selectedVariant.stock : product.stock;
   
   // Xử lý mô tả có 5 dòng
   const descriptionLines = (product.description || '').split('\n').slice(0, 5).join('\n');
@@ -133,7 +119,6 @@ const ProductDetail = () => {
   return (
     <div className="container my-5">
       <div className="row">
-        {/* HÌNH ẢNH */}
         <div className="col-md-5">
           <img 
             src={product.images[mainImage]} 
@@ -144,38 +129,58 @@ const ProductDetail = () => {
           {product.images.length > 1 && (
             <div className="d-flex gap-2 overflow-auto pb-2">
               {product.images.map((img, index) => (
-                <img 
-                  key={index}
-                  src={img} 
-                  className={`img-thumbnail cursor-pointer ${index === mainImage ? 'border-primary' : ''}`}
-                  style={{ width: '60px', height: '60px', objectFit: 'cover', cursor: 'pointer' }}
-                  onClick={() => setMainImage(index)}
-                  alt="thumb"
-                />
+                <img key={index} src={img} className={`img-thumbnail cursor-pointer ${index === mainImage ? 'border-primary' : ''}`} style={{ width: '60px', height: '60px', objectFit: 'cover' }} onClick={() => setMainImage(index)} alt="thumb" />
               ))}
             </div>
           )}
         </div>
 
-        {/* THÔNG TIN */}
         <div className="col-md-7">
           <h2>{product.name}</h2>
-          <h3 className="text-danger fw-bold my-3">{Number(product.price).toLocaleString('vi-VN')} ₫</h3>
+          
+          {/* HIỂN THỊ GIÁ THEO BIẾN THỂ */}
+          <h3 className="text-danger fw-bold my-3">
+             {selectedVariant ? Number(currentPrice).toLocaleString('vi-VN') : 'Từ ' + Number(currentPrice).toLocaleString('vi-VN')} ₫
+          </h3>
+          
           <p><strong>Thương hiệu:</strong> {product.brand?.name || 'N/A'}</p>
           <p><strong>Danh mục:</strong> {product.category?.name || 'N/A'}</p>
-          <p><strong>Tình trạng:</strong> <span className={product.stock > 0 ? 'text-success' : 'text-danger'}>{product.stock > 0 ? 'Còn hàng' : 'Hết hàng'}</span></p>
+
+          {/* === CHỌN BIẾN THỂ (MỚI) === */}
+          <div className="mb-4">
+             <label className="fw-bold mb-2">Chọn phiên bản:</label>
+             <div className="d-flex flex-wrap gap-2">
+                {product.variants?.map((v, idx) => (
+                    <button 
+                        key={v._id || idx}
+                        className={`btn ${selectedVariant?._id === v._id ? 'btn-primary' : 'btn-outline-secondary'}`}
+                        onClick={() => setSelectedVariant(v)}
+                    >
+                        {v.name}
+                    </button>
+                ))}
+             </div>
+          </div>
+
+          <p><strong>Tình trạng:</strong> 
+             <span className={`ms-2 ${currentStock > 0 ? 'text-success' : 'text-danger'}`}>
+                {selectedVariant 
+                    ? (currentStock > 0 ? `Còn hàng (${currentStock})` : 'Hết hàng') 
+                    : 'Vui lòng chọn phiên bản để xem kho'}
+             </span>
+          </p>
           
           <button 
             className="btn btn-primary btn-lg mt-3" 
             onClick={handleAddToCart}
-            disabled={product.stock === 0}
+            disabled={currentStock === 0 || !selectedVariant}
           >
             <i className="bi bi-cart-plus me-2"></i>Thêm vào giỏ hàng
           </button>
           
           <hr className="my-4" />
           <h5>Mô tả sản phẩm</h5>
-          <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit' }}>{descriptionLines}</pre>
+          <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit' }}>{product.description}</pre>
         </div>
       </div>
 

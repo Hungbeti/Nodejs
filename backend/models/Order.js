@@ -26,7 +26,8 @@ const orderSchema = new Schema({
     name: { type: String, required: true },
     email: { type: String, required: true },
     phone: { type: String },
-    address: { type: String, required: true }
+    address: { type: String, required: true },
+    addressLine: { type: String }
   },
 
   paymentMethod: { type: String, required: true, default: 'cod' },

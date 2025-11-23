@@ -44,6 +44,8 @@ const Checkout = () => {
   const { fetchCartCount } = useCart();
   const navigate = useNavigate();
   const { state } = useLocation(); 
+  const [phoneError, setPhoneError] = useState('');
+  const [emailError, setEmailError] = useState('');
 
   useEffect(() => {
     if (state && state.couponCode) setCoupon(state.couponCode);
@@ -89,10 +91,11 @@ const Checkout = () => {
           if (addresses.length > 0) {
              const defaultAddr = addresses.find(a => a.isDefault);
              setSelectedAddress(defaultAddr ? defaultAddr._id : addresses[0]._id);
-          } else {
-             setSelectedAddress('new');
-             setShipping(s => ({ ...s, name: userData.name, email: userData.email }));
-          }
+          } 
+          // else {
+          //    setSelectedAddress('new');
+          //    setShipping(s => ({ ...s, name: userData.name, email: userData.email }));
+          // }
         } catch (err) {
           console.error("Lỗi tải profile:", err);
         }
@@ -115,36 +118,44 @@ const Checkout = () => {
     }
   };
 
+  // Thay toàn bộ hàm placeOrder bằng đoạn này:
   const placeOrder = async () => {
     try {
-      const finalTotal = totals.total - (usePoints ? pointsToUse * 1000 : 0);
-      if (finalTotal < 0) return toast.error('Tổng tiền không hợp lệ');
+      // === VALIDATE THÔNG TIN GIAO HÀNG TRƯỚC KHI GỬI ===
+      let shippingAddress;
 
-      let shippingAddress;  // Đổi tên biến để khớp backend
-
-      // Nếu dùng địa chỉ mới hoặc chưa đăng nhập
       if (selectedAddress === 'new' || !isLoggedIn) {
-        if (!shipping.name || !shipping.addressLine || (!isLoggedIn && !shipping.email)) {
-          return toast.error('Vui lòng điền đầy đủ thông tin giao hàng');
-        }
+        // Validate bắt buộc
+        if (!shipping.name?.trim()) return toast.error('Vui lòng nhập họ tên');
+        if (!shipping.phone?.trim()) return toast.error('Vui lòng nhập số điện thoại');
+        if (!/^\d{10}$/.test(shipping.phone.replace(/[\s-]/g, ''))) 
+          return toast.error('Số điện thoại phải có đúng 10 chữ số');
+        if (!shipping.addressLine?.trim()) return toast.error('Vui lòng nhập địa chỉ chi tiết');
+        if (!isLoggedIn && !shipping.email?.trim()) return toast.error('Vui lòng nhập email');
+        if (!isLoggedIn && !/^\S+@\S+\.\S+$/.test(shipping.email)) 
+          return toast.error('Email không hợp lệ');
+
         shippingAddress = {
-          name: shipping.name,
-          email: shipping.email || userEmail,
-          phone: shipping.phone,
-          address: shipping.addressLine  // Backend dùng 'address'
+          name: shipping.name.trim(),
+          email: shipping.email.trim(),
+          phone: shipping.phone.replace(/[\s-]/g, ''), // Chuẩn hóa số điện thoại
+          address: shipping.addressLine.trim()
         };
       } else {
-        // Dùng địa chỉ có sẵn từ profile
         const addr = profileAddresses.find(a => a._id === selectedAddress);
-        if (!addr) return toast.error('Không tìm thấy địa chỉ đã chọn');
+        if (!addr) return toast.error('Địa chỉ không hợp lệ');
 
         shippingAddress = {
           name: addr.fullName,
-          email: userEmail,
+          email: userEmail, // Đã đăng nhập → có email từ profile
           phone: addr.phone,
           address: addr.addressLine
         };
       }
+
+      // === TÍNH TỔNG CUỐI CÙNG ===
+      const finalTotal = totals.total - (usePoints ? pointsToUse * 1000 : 0);
+      if (finalTotal < 0) return toast.error('Tổng tiền không hợp lệ');
 
       const orderData = {
         items: items.map(i => ({
@@ -153,33 +164,23 @@ const Checkout = () => {
           quantity: i.quantity,
           price: i.product.price
         })),
-        shippingAddress: shippingAddress,  // ← Key đúng là shippingAddress
+        shippingAddress,
         paymentMethod: payment,
-        couponCode: coupon || undefined,
-        usePoints: usePoints ? pointsToUse : 0
+        couponCode: coupon || undefined, // Giữ nguyên, backend sẽ bỏ nếu undefined
+        loyaltyPointsUsed: usePoints ? pointsToUse : 0
       };
 
-      // Bonus: Log để debug (xóa sau khi test xong)
-      console.log('Order data gửi đi:', orderData);
+      console.log('Order data gửi đi:', orderData); // Debug
 
       const res = await api.post('/orders', orderData);
       setOrderId(res.data._id);
       setOrderSuccess(true);
-
-      if (isLoggedIn) {
-        // await api.delete('/cart/clear');
-        try {
-          await api.delete('/cart/clear');
-        } catch (deleteErr) {
-          console.warn('Lỗi xóa giỏ hàng:', deleteErr);
-        }
-      } else {
-        clearGuestCart();
-      }
-      
+      clearGuestCart(); // Xóa giỏ khách
       fetchCartCount();
+      toast.success('Đặt hàng thành công!');
     } catch (err) {
-      toast.error(err.response?.data?.msg || "Lỗi đặt hàng");
+      console.error('Lỗi đặt hàng:', err.response?.data);
+      toast.error(err.response?.data?.msg || 'Đặt hàng thất bại, vui lòng thử lại');
     }
   };
 
@@ -227,6 +228,31 @@ const Checkout = () => {
     }
 
     setStep(2);
+  };
+
+  const checkPhone = async (phone) => {
+    const cleanPhone = phone.replace(/[\s-]/g, '');
+    if (!/^\d{10}$/.test(cleanPhone)) {
+      setPhoneError('Số điện thoại phải đúng 10 số');
+      return;
+    }
+    setPhoneError('');
+    try {
+      const res = await api.post('/users/check-phone', { phone: cleanPhone });
+      if (res.data.exists) setPhoneError('Số điện thoại đã tồn tại');
+    } catch (err) {}
+  };
+
+  const checkEmail = async (email) => {
+    if (!/^\S+@\S+\.\S+$/.test(email)) {
+      setEmailError('Email không hợp lệ');
+      return;
+    }
+    setEmailError('');
+    try {
+      const res = await api.post('/users/check-email', { email });
+      if (res.data.exists) setEmailError('Email đã tồn tại');
+    } catch (err) {}
   };
 
   return (
@@ -301,7 +327,14 @@ const Checkout = () => {
                 </div>
                 <div className="col-md-6 mb-3">
                   <label>Số điện thoại</label>
-                  <input className="form-control" value={shipping.phone} onChange={e => setShipping({...shipping, phone: e.target.value})} required />
+                  <input 
+                    className={`form-control ${phoneError ? 'is-invalid' : ''}`}
+                    value={shipping.phone} 
+                    onChange={e => { setShipping({...shipping, phone: e.target.value}); setPhoneError(''); }}
+                    onBlur={e => checkPhone(e.target.value)}
+                    placeholder="0987654321"
+                  />
+                  {phoneError && <div className="invalid-feedback">{phoneError}</div>}
                 </div>
               </div>
               <div className="mb-3">
@@ -310,8 +343,17 @@ const Checkout = () => {
               </div>
               {!isLoggedIn && (
                 <div className="mb-3">
-                  <label>Email (để nhận thông báo đơn hàng)</label>
-                  <input type="email" className="form-control" value={shipping.email} onChange={e => setShipping({...shipping, email: e.target.value})} required />
+                  <label>Email</label>
+                  <input 
+                    type="email" 
+                    className={`form-control ${emailError ? 'is-invalid' : ''}`}
+                    value={shipping.email}
+                    onChange={e => { setShipping({...shipping, email: e.target.value}); setEmailError(''); }}
+                    onBlur={e => checkEmail(e.target.value)}
+                    placeholder="example@gmail.com"
+                    required 
+                  />
+                  {emailError && <div className="invalid-feedback">{emailError}</div>}
                 </div>
               )}
             </div>

@@ -8,6 +8,11 @@ const cartItemSchema = new Schema({
     ref: 'Product',
     required: true
   },
+  // --- THÊM CÁC TRƯỜNG NÀY ---
+  variantId: { type: String }, // ID của biến thể
+  variantName: { type: String }, // Tên biến thể (VD: 6T)
+  price: { type: Number, required: true }, // Lưu giá riêng của biến thể đó
+  // ---------------------------
   quantity: {
     type: Number,
     required: true,
@@ -20,7 +25,7 @@ const cartSchema = new Schema({
     type: Schema.Types.ObjectId,
     ref: 'User',
     required: true,
-    unique: true // Đảm bảo mỗi user chỉ có 1 giỏ hàng
+    unique: true 
   },
   items: [cartItemSchema],
 }, {
