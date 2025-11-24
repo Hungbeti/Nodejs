@@ -31,16 +31,11 @@ const Cart = () => {
   const { isLoggedIn } = useAuth();
   const navigate = useNavigate();
 
-  // 1. SỬA LOGIC TÍNH TỔNG: Dùng item.price thay vì item.product.price
+  // === HÀM TÍNH TOÁN TỔNG CƠ BẢN (Không bao gồm discount) ===
   const calculateBaseTotals = (items, selectedIds) => {
-    // Lọc những item hợp lệ
-    const validItems = (items || []).filter(item => item && item.product);
-    
-    // Lọc những item được chọn (so sánh theo item._id thay vì product._id)
-    const itemsToCalc = validItems.filter(item => selectedIds.includes(item._id));
-    
-    // Tính tổng: Dùng item.price (giá biến thể)
-    const subtotal = itemsToCalc.reduce((sum, item) => sum + ((item.price || item.product?.price || 0) * item.quantity), 0);
+    const validItems = (items || []).filter(item => item && item.product && typeof item.product.price === 'number');
+    const itemsToCalc = validItems.filter(item => selectedIds.includes(item.product._id));
+    const subtotal = itemsToCalc.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
     
     const tax = subtotal > 0 ? subtotal * 0.1 : 0; 
     const shipping = subtotal > 0 ? 30000 : 0;
@@ -131,51 +126,47 @@ const Cart = () => {
 
 
   // === CÁC HÀM XỬ LÝ SỰ KIỆN ===
-
-  // 2. SỬA LOGIC SELECT ALL: Lưu item._id
   const handleSelectAll = (e) => {
     if (e.target.checked) {
-      setSelectedItems(cartItems.map(i => i._id)); // Dùng _id của cart item
+      setSelectedItems(cartItems.map(i => i.product._id));
     } else {
       setSelectedItems([]);
     }
   };
 
-  // 3. SỬA LOGIC SELECT ITEM: Lưu item._id
-  const handleSelectItem = (itemId) => {
-    if (selectedItems.includes(itemId)) {
-      setSelectedItems(selectedItems.filter(id => id !== itemId));
+  const handleSelectItem = (productId) => {
+    if (selectedItems.includes(productId)) {
+      setSelectedItems(selectedItems.filter(id => id !== productId));
     } else {
-      setSelectedItems([...selectedItems, itemId]);
+      setSelectedItems([...selectedItems, productId]);
     }
   };
 
-  // 4. SỬA LOGIC UPDATE: Gửi itemId
-  const updateQuantity = async (itemId, qty) => {
-    if (qty < 1) return removeItem(itemId);
+  const updateQuantity = async (productId, qty) => {
+    if (qty < 1) return removeItem(productId);
     try {
       if (isLoggedIn) {
-        // Gửi itemId thay vì productId
-        await api.put('/cart/update', { itemId: itemId, quantity: qty });
+        await api.put('/cart/update', { productId: productId, quantity: qty });
       } else {
-        // Logic Guest (Khách) cần sửa để lưu variant
-        // (Phần này tạm thời bạn focus vào user đăng nhập trước)
+        const items = getGuestCart();
+        const item = items.find(i => i.product._id === productId);
+        if (item) item.quantity = qty;
+        saveGuestCart(items);
       }
-      loadCart();
+      loadCart(); // Load lại sẽ kích hoạt useEffect tính lại tiền
     } catch (err) { toast.error('Lỗi cập nhật'); }
   };
 
-  // 5. SỬA LOGIC REMOVE: Gửi itemId
-  const removeItem = async (itemId) => { // Đổi param thành itemId
+  const removeItem = async (productId) => {
     try {
       if (isLoggedIn) {
-        await api.delete(`/cart/remove/${itemId}`);
+        await api.delete(`/cart/remove/${productId}`);
       } else {
         let items = getGuestCart();
-        items = items.filter(i => (i.product ? i.product._id : i._id) !== itemId);
+        items = items.filter(i => i.product._id !== productId);
         saveGuestCart(items);
       }
-      setSelectedItems(prev => prev.filter(id => id !== itemId));
+      setSelectedItems(prev => prev.filter(id => id !== productId));
       loadCart();
     } catch (err) { toast.error('Lỗi xóa'); }
   };
@@ -282,37 +273,26 @@ const Cart = () => {
                     onChange={() => handleSelectItem(item._id)}
                   />
                   
-                  <Link to={`/product/${(item.product._id || item.product).toString().split('-')[0]}`}>
-                      <img src={item.product.images ? item.product.images[0] : (item.images ? item.images[0] : '')} alt={item.product.name} style={{ width: '80px', objectFit:'cover' }} className="me-3 rounded border" />
+                  {/* [YC 1] LINK ĐẾN TRANG CHI TIẾT SẢN PHẨM */}
+                  <Link to={`/product/${item.product._id}`}>
+                      <img src={item.product.images[0]} alt={item.product.name} style={{ width: '80px', objectFit:'cover' }} className="me-3 rounded border" />
                   </Link>
                   
                   <div className="flex-grow-1">
-                    <Link to={`/product/${(item.product._id || item.product).toString().split('-')[0]}`} style={{ textDecoration: 'none', color: 'inherit' }}>
-                        <h6 className="mb-1 hover-primary">
-                            {item.product.name || item.name}
-                            {item.variantName && <span className="text-muted small ms-2">({item.variantName})</span>}
-                        </h6>
+                    {/* [YC 1] LINK ĐẾN TRANG CHI TIẾT SẢN PHẨM (TÊN) */}
+                    <Link to={`/product/${item.product._id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                        <h6 className="mb-1 hover-primary">{item.product.name}</h6>
                     </Link>
-                    
-                    {/* --- SỬA ĐOẠN NÀY --- */}
-                    {/* Kiểm tra item.price tồn tại thì dùng, không thì dùng item.product.price, không có nữa thì là 0 */}
-                    <p className="text-primary fw-bold">
-                      {(item.price || item.product.price || 0).toLocaleString()}đ
-                    </p>
-                    {/* ------------------- */}
+                    <p className="text-primary fw-bold">{item.product.price.toLocaleString()}đ</p>
                   </div>
 
                   <div className="d-flex align-items-center me-3">
-                    <button className="btn btn-sm btn-outline-secondary" onClick={() => updateQuantity(item._id, item.quantity - 1)}>-</button>
+                    <button className="btn btn-sm btn-outline-secondary" onClick={() => updateQuantity(item.product._id, item.quantity - 1)}>-</button>
                     <span className="mx-2" style={{width: '20px', textAlign:'center'}}>{item.quantity}</span>
-                    <button className="btn btn-sm btn-outline-secondary" onClick={() => updateQuantity(item._id, item.quantity + 1)}>+</button>
+                    <button className="btn btn-sm btn-outline-secondary" onClick={() => updateQuantity(item.product._id, item.quantity + 1)}>+</button>
                   </div>
-                  
-                  {/* --- SỬA ĐOẠN TÍNH TỔNG NÀY --- */}
-                  <h6 className="me-3">{((item.price || item.product.price) * item.quantity).toLocaleString()}đ</h6>
-                  {/* ------------------------------ */}
-                  
-                  <button className="btn btn-sm btn-outline-danger" onClick={() => removeItem(item._id || item.product._id)}><i className="bi bi-trash"></i></button>
+                  <h6 className="me-3 mb-0">{(item.product.price * item.quantity).toLocaleString()}đ</h6>
+                  <button className="btn btn-sm btn-outline-danger" onClick={() => removeItem(item.product._id)}><i className="bi bi-trash"></i></button>
                 </div>
               </div>
             ))
@@ -365,10 +345,10 @@ const Cart = () => {
           </div>
         </div>
       </div>
-      
+
       {/* MODAL COUPON */}
       <Modal show={showCouponModal} onHide={() => setShowCouponModal(false)} centered>
-        <Modal.Header closeButton><Modal.Title>Mã giảm giá có sẵn</Modal.Title></Modal.Header>
+        <Modal.Header closeButton><Modal.Title>Mã giảm giá</Modal.Title></Modal.Header>
         <Modal.Body style={{ maxHeight: '60vh', overflowY: 'auto' }}>
           <ListGroup variant="flush">
             {availableCoupons
@@ -377,6 +357,7 @@ const Cart = () => {
                 <ListGroup.Item 
                   key={cp._id} 
                   action 
+                  // [YC 2] Click vào item cũng áp dụng luôn cho tiện
                   onClick={() => handleSelectCoupon(cp.code)}
                   className="d-flex justify-content-between align-items-center border rounded mb-2"
                 >
@@ -385,25 +366,10 @@ const Cart = () => {
                     <div className="text-danger fw-bold">
                        Giảm {cp.type === 'percent' ? `${cp.value}%` : `${cp.value.toLocaleString()}đ`}
                     </div>
-                    
-                    {/* --- PHẦN CHỈNH SỬA BẮT ĐẦU --- */}
-                    <div className="text-muted small mt-1" style={{fontSize: '0.85rem'}}>
-                      <div>Đơn tối thiểu: {cp.minOrderValue.toLocaleString()}đ</div>
-                      
-                      {/* Hiển thị danh mục áp dụng */}
-                      <div>
-                        Áp dụng: {cp.applicableCategories && cp.applicableCategories.length > 0 
-                          ? cp.applicableCategories.map(c => c.name).join(', ') 
-                          : 'Tất cả sản phẩm'}
-                      </div>
-
-                      {/* Hiển thị số lượt còn lại */}
-                      <div className="text-success">
-                        Còn lại: {cp.maxUses - cp.uses} lượt
-                      </div>
+                    <div className="text-muted small" style={{fontSize: '0.85rem'}}>
+                      Đơn tối thiểu: {cp.minOrderValue.toLocaleString()}đ <br/>
+                      HSD: {cp.expiryDate ? new Date(cp.expiryDate).toLocaleDateString('vi-VN') : 'Vô thời hạn'}
                     </div>
-                    {/* --- PHẦN CHỈNH SỬA KẾT THÚC --- */}
-
                   </div>
                   <Button variant="outline-success" size="sm" onClick={(e) => {
                       e.stopPropagation(); 
@@ -412,7 +378,7 @@ const Cart = () => {
                 </ListGroup.Item>
               ))
             }
-             {availableCoupons.length === 0 && <p className="text-center text-muted">Không có mã nào phù hợp.</p>}
+             {availableCoupons.length === 0 && <p className="text-center text-muted">Không có mã nào.</p>}
           </ListGroup>
         </Modal.Body>
       </Modal>
