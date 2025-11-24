@@ -25,7 +25,7 @@ const ProductDetail = () => {
   const [comment, setComment] = useState('');
   const [guestName, setGuestName] = useState('');
   
-  const { addToCart } = useCart();
+  const { addToCart, fetchCartCount } = useCart();
   const { isLoggedIn } = useAuth();
 
   const fetchProduct = async () => {
@@ -57,21 +57,44 @@ const ProductDetail = () => {
   const handleAddToCart = async () => {
     if (!selectedVariant) return toast.error('Vui lòng chọn phiên bản!');
     try {
-      const productToAdd = {
-        _id: product._id + '-' + selectedVariant._id, // Tạo ID duy nhất cho item (productId-variantId)
-        product: product._id,
-        name: product.name,
-        images: product.images,
-        price: selectedVariant.price,
+      // Dữ liệu chuẩn để gửi lên Backend (User đã đăng nhập)
+      const cartItemPayload = {
+        productId: product._id, // Quan trọng: Phải khớp với req.body.productId ở backend
+        quantity: 1,
+        variantId: selectedVariant._id,
+        variantName: selectedVariant.name,
+        price: selectedVariant.price
+      };
+
+      // Dữ liệu để lưu LocalStorage (Guest) - Cần cấu trúc khác một chút để hiển thị ngay
+      const guestItemPayload = {
+        _id: product._id + '-' + selectedVariant._id, // ID giả lập cho Guest
+        product: { // Guest cần object product đầy đủ để hiển thị ảnh/tên
+            _id: product._id,
+            name: product.name,
+            images: product.images,
+            price: product.price // Giá gốc
+        },
+        price: selectedVariant.price, // Giá biến thể
         variantId: selectedVariant._id,
         variantName: selectedVariant.name,
         quantity: 1
       };
       
-      await addToCart(productToAdd, 1);
-      toast.success('Thêm thành công!');
+      // Kiểm tra đăng nhập để gửi đúng payload
+      if (isLoggedIn) {
+          await api.post('/cart/add', cartItemPayload);
+          // Sau khi thêm thành công, fetch lại giỏ hàng để cập nhật state
+          fetchCartCount(); 
+          toast.success('Thêm thành công!');
+      } else {
+          // Logic cho Guest (giữ nguyên logic cũ của bạn hoặc dùng addToCart context)
+          await addToCart(guestItemPayload, 1);
+          toast.success('Thêm thành công!');
+      }
+
     } catch (err) {
-      toast.error(err.response?.data?.msg || 'Lỗi thêm');
+      toast.error(err.response?.data?.msg || 'Lỗi thêm vào giỏ');
     }
   };
 
@@ -112,48 +135,67 @@ const ProductDetail = () => {
   // Lấy giá và stock để hiển thị dựa trên selection
   const currentPrice = selectedVariant ? selectedVariant.price : product.price;
   const currentStock = selectedVariant ? selectedVariant.stock : product.stock;
+  let priceDisplay = '';
+  if (selectedVariant) {
+    priceDisplay = Number(selectedVariant.price).toLocaleString('vi-VN') + ' ₫';
+  } else if (product.variants && product.variants.length > 0) {
+    const prices = product.variants.map(v => v.price);
+    const minPrice = Math.min(...prices);
+    const maxPrice = Math.max(...prices);
+    
+    if (minPrice === maxPrice) {
+       priceDisplay = Number(minPrice).toLocaleString('vi-VN') + ' ₫';
+    } else {
+       priceDisplay = `${Number(minPrice).toLocaleString('vi-VN')} - ${Number(maxPrice).toLocaleString('vi-VN')} ₫`;
+    }
+  } else {
+    priceDisplay = Number(product.price).toLocaleString('vi-VN') + ' ₫';
+  }
   
   // Xử lý mô tả có 5 dòng
   const descriptionLines = (product.description || '').split('\n').slice(0, 5).join('\n');
 
   return (
     <div className="container my-5">
-      <div className="row">
+      {/* PHẦN TRÊN: ẢNH & THÔNG TIN MUA HÀNG */}
+      <div className="row mb-5">
         <div className="col-md-5">
-          <img 
-            src={product.images[mainImage]} 
-            alt={product.name} 
-            className="img-fluid rounded mb-3 border"
-            style={{ maxHeight: '400px', width: '100%', objectFit: 'contain' }}
-          />
+          <div className="border rounded p-2 mb-3">
+            <img 
+                src={product.images[mainImage]} 
+                alt={product.name} 
+                className="img-fluid"
+                style={{ maxHeight: '400px', width: '100%', objectFit: 'contain' }}
+            />
+          </div>
           {product.images.length > 1 && (
             <div className="d-flex gap-2 overflow-auto pb-2">
               {product.images.map((img, index) => (
-                <img key={index} src={img} className={`img-thumbnail cursor-pointer ${index === mainImage ? 'border-primary' : ''}`} style={{ width: '60px', height: '60px', objectFit: 'cover' }} onClick={() => setMainImage(index)} alt="thumb" />
+                <img key={index} src={img} className={`img-thumbnail cursor-pointer ${index === mainImage ? 'border-primary' : ''}`} style={{ width: '70px', height: '70px', objectFit: 'cover' }} onClick={() => setMainImage(index)} alt="thumb" />
               ))}
             </div>
           )}
         </div>
 
         <div className="col-md-7">
-          <h2>{product.name}</h2>
+          <h2 className="fw-bold mb-3">{product.name}</h2>
           
-          {/* HIỂN THỊ GIÁ THEO BIẾN THỂ */}
-          <h3 className="text-danger fw-bold my-3">
-             {selectedVariant ? Number(currentPrice).toLocaleString('vi-VN') : 'Từ ' + Number(currentPrice).toLocaleString('vi-VN')} ₫
-          </h3>
-          
-          <p><strong>Thương hiệu:</strong> {product.brand?.name || 'N/A'}</p>
-          <p><strong>Danh mục:</strong> {product.category?.name || 'N/A'}</p>
+          <div className="mb-3">
+             <span className="badge bg-info text-dark me-2">{product.brand?.name || 'N/A'}</span>
+             <span className="badge bg-secondary">{product.category?.name || 'N/A'}</span>
+          </div>
 
-          {/* === CHỌN BIẾN THỂ (MỚI) === */}
+          <h3 className="text-danger fw-bold mb-4 bg-light p-3 rounded">
+             {priceDisplay}
+          </h3>
+
           <div className="mb-4">
-             <label className="fw-bold mb-2">Chọn phiên bản:</label>
+             <label className="fw-bold mb-2 d-block">Chọn phiên bản:</label>
              <div className="d-flex flex-wrap gap-2">
                 {product.variants?.map((v, idx) => (
                     <button 
                         key={v._id || idx}
-                        className={`btn ${selectedVariant?._id === v._id ? 'btn-primary' : 'btn-outline-secondary'}`}
+                        className={`btn ${selectedVariant?._id === v._id ? 'btn-primary' : 'btn-outline-secondary'} px-4 py-2`}
                         onClick={() => setSelectedVariant(v)}
                     >
                         {v.name}
@@ -162,96 +204,119 @@ const ProductDetail = () => {
              </div>
           </div>
 
-          <p><strong>Tình trạng:</strong> 
-             <span className={`ms-2 ${currentStock > 0 ? 'text-success' : 'text-danger'}`}>
+          <div className="d-flex align-items-center mb-4">
+             <strong className="me-2">Tình trạng:</strong> 
+             <span className={`fw-bold ${currentStock > 0 ? 'text-success' : 'text-danger'}`}>
                 {selectedVariant 
                     ? (currentStock > 0 ? `Còn hàng (${currentStock})` : 'Hết hàng') 
-                    : 'Vui lòng chọn phiên bản để xem kho'}
+                    : 'Vui lòng chọn phiên bản'}
              </span>
-          </p>
+          </div>
           
           <button 
-            className="btn btn-primary btn-lg mt-3" 
+            className="btn btn-primary btn-lg px-5 py-3" 
             onClick={handleAddToCart}
             disabled={currentStock === 0 || !selectedVariant}
           >
-            <i className="bi bi-cart-plus me-2"></i>Thêm vào giỏ hàng
+            <i className="bi bi-cart-plus me-2"></i>
+            {currentStock === 0 ? 'Hết hàng' : 'THÊM VÀO GIỎ HÀNG'}
           </button>
-          
-          <hr className="my-4" />
-          <h5>Mô tả sản phẩm</h5>
-          <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit' }}>{product.description}</pre>
         </div>
       </div>
 
-      {/* BÌNH LUẬN */}
-      <div className="row mt-5">
-        <div className="col-md-8">
-          <h3>Đánh giá & Bình luận ({product.reviews?.length || 0})</h3>
-          
-          <div className="card my-4 bg-light">
-            <div className="card-body">
-              <form onSubmit={isLoggedIn ? submitLoggedInReview : submitGuestComment}>
-                {!isLoggedIn && (
-                  <div className="mb-3">
-                    <input 
-                      className="form-control" 
-                      placeholder="Tên của bạn (Bắt buộc)" 
-                      value={guestName}
-                      onChange={e => setGuestName(e.target.value)}
-                      required
-                    />
-                  </div>
-                )}
-                
-                {isLoggedIn && (
-                  <div className="mb-3 d-flex align-items-center">
-                     <span className="me-2">Đánh giá:</span>
-                     <select className="form-select w-auto" value={rating} onChange={e => setRating(e.target.value)}>
-                        <option value="5">5 ⭐ (Tuyệt vời)</option>
-                        <option value="4">4 ⭐ (Tốt)</option>
-                        <option value="3">3 ⭐ (Bình thường)</option>
-                        <option value="2">2 ⭐ (Tệ)</option>
-                        <option value="1">1 ⭐ (Rất tệ)</option>
-                     </select>
-                  </div>
-                )}
-
-                <div className="mb-3">
-                  <textarea 
-                    className="form-control" 
-                    rows="3" 
-                    placeholder="Viết bình luận của bạn..."
-                    value={comment}
-                    onChange={e => setComment(e.target.value)}
-                    required
-                  ></textarea>
+      {/* PHẦN DƯỚI: MÔ TẢ & ĐÁNH GIÁ (Chia cột) */}
+      <div className="row">
+        {/* Cột Trái: MÔ TẢ SẢN PHẨM */}
+        <div className="col-lg-8 mb-4">
+            <div className="card shadow-sm h-100">
+                <div className="card-header bg-white fw-bold py-3">
+                    MÔ TẢ SẢN PHẨM
                 </div>
-                <button type="submit" className="btn btn-primary">Gửi</button>
-              </form>
+                <div className="card-body">
+                    <pre style={{ 
+                        whiteSpace: 'pre-wrap', 
+                        fontFamily: 'inherit',
+                        fontSize: '1rem',
+                        lineHeight: '1.6',
+                        color: '#333'
+                    }}>
+                        {product.description}
+                    </pre>
+                </div>
             </div>
-          </div>
-          
-          {/* DANH SÁCH REVIEW */}
-          <div className="reviews-list">
-            {product.reviews && product.reviews.length > 0 ? (
-              [...product.reviews].reverse().map((review, index) => ( // Đảo ngược để hiện mới nhất lên đầu
-                <div key={index} className="card mb-3 border-0 shadow-sm">
-                  <div className="card-body">
-                    <div className="d-flex justify-content-between">
-                      <h6 className="fw-bold mb-1">{review.name}</h6>
-                      <small className="text-muted">
-                        {new Date(review.createdAt).toLocaleDateString('vi-VN')} {new Date(review.createdAt).toLocaleTimeString('vi-VN')}
-                      </small>
-                    </div>
-                    {review.rating && <div className="text-warning mb-2">{'⭐'.repeat(review.rating)}</div>}
-                    <p className="mb-0 text-secondary">{review.comment}</p>
-                  </div>
+        </div>
+
+        {/* Cột Phải: ĐÁNH GIÁ & BÌNH LUẬN */}
+        <div className="col-lg-4">
+          <div className="card shadow-sm">
+             <div className="card-header bg-white fw-bold py-3">
+                ĐÁNH GIÁ ({product.reviews?.length || 0})
+             </div>
+             <div className="card-body">
+                {/* Form Đánh giá */}
+                <div className="mb-4 p-3 bg-light rounded">
+                    <h6 className="fw-bold mb-3">Viết đánh giá của bạn</h6>
+                    <form onSubmit={isLoggedIn ? submitLoggedInReview : submitGuestComment}>
+                        {!isLoggedIn && (
+                        <div className="mb-2">
+                            <input 
+                            className="form-control form-control-sm" 
+                            placeholder="Tên của bạn..." 
+                            value={guestName}
+                            onChange={e => setGuestName(e.target.value)}
+                            required
+                            />
+                        </div>
+                        )}
+                        
+                        {isLoggedIn && (
+                        <div className="mb-2">
+                            <select className="form-select form-select-sm" value={rating} onChange={e => setRating(e.target.value)}>
+                                <option value="5">5 ⭐ (Tuyệt vời)</option>
+                                <option value="4">4 ⭐ (Tốt)</option>
+                                <option value="3">3 ⭐ (Bình thường)</option>
+                                <option value="2">2 ⭐ (Tệ)</option>
+                                <option value="1">1 ⭐ (Rất tệ)</option>
+                            </select>
+                        </div>
+                        )}
+
+                        <div className="mb-2">
+                        <textarea 
+                            className="form-control form-control-sm" 
+                            rows="3" 
+                            placeholder="Nội dung..."
+                            value={comment}
+                            onChange={e => setComment(e.target.value)}
+                            required
+                        ></textarea>
+                        </div>
+                        <button type="submit" className="btn btn-primary btn-sm w-100">Gửi đánh giá</button>
+                    </form>
                 </div>
-              ))
-            ) : (
-              <p className="text-muted">Chưa có đánh giá nào.</p>
-            )}
+
+                {/* List Đánh giá */}
+                <div className="reviews-list" style={{ maxHeight: '500px', overflowY: 'auto' }}>
+                    {product.reviews && product.reviews.length > 0 ? (
+                    [...product.reviews].reverse().map((review, index) => (
+                        <div key={index} className="border-bottom pb-3 mb-3">
+                            <div className="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <strong className="d-block">{review.name}</strong>
+                                    {review.rating && <small className="text-warning">{'⭐'.repeat(review.rating)}</small>}
+                                </div>
+                                <small className="text-muted" style={{fontSize: '0.75rem'}}>
+                                    {new Date(review.createdAt).toLocaleDateString('vi-VN')}
+                                </small>
+                            </div>
+                            <p className="mb-0 mt-1 text-secondary small">{review.comment}</p>
+                        </div>
+                    ))
+                    ) : (
+                    <p className="text-muted text-center small py-3">Chưa có đánh giá nào.</p>
+                    )}
+                </div>
+             </div>
           </div>
         </div>
       </div>

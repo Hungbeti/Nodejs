@@ -1,25 +1,39 @@
-//src/components/ProductCard.js
+// src/components/ProductCard.js
 import React from 'react';
-import { Link } from 'react-router-dom';
-import { useCart } from '../context/CartContext';
-import { toast } from 'react-toastify';
+import { Link, useNavigate } from 'react-router-dom';
 
 const ProductCard = ({ product }) => {
-  const { addToCart } = useCart();
+  const navigate = useNavigate();
 
-  const handleAddToCart = async (e) => {
-    e.stopPropagation(); // Ngăn click vào thẻ Link cha
-    e.preventDefault(); // Ngăn hành vi mặc định
-    try {
-      await addToCart(product, 1);
-      toast('Thêm vào giỏ thành công!');
-    } catch (err) {
-      toast('Không thể thêm vào giỏ: ' + (err.response?.data?.msg || err.message));
-    }
+  const handleBuyClick = (e) => {
+    e.preventDefault(); 
+    e.stopPropagation();
+    navigate(`/product/${product._id}`);
   };
 
+  // --- HÀM TÍNH TOÁN HIỂN THỊ GIÁ ---
+  const getPriceDisplay = () => {
+    // Nếu không có biến thể hoặc mảng rỗng -> Dùng giá gốc
+    if (!product.variants || product.variants.length === 0) {
+      return Number(product.price).toLocaleString('vi-VN') + ' ₫';
+    }
+
+    // Lấy danh sách tất cả các giá từ biến thể
+    const prices = product.variants.map(v => v.price);
+    const minPrice = Math.min(...prices);
+    const maxPrice = Math.max(...prices);
+
+    // Nếu giá min = max (tất cả biến thể đồng giá) -> Hiện 1 giá
+    if (minPrice === maxPrice) {
+      return Number(minPrice).toLocaleString('vi-VN') + ' ₫';
+    }
+
+    // Nếu giá khác nhau -> Hiện khoảng giá "Min - Max"
+    return `${Number(minPrice).toLocaleString('vi-VN')} - ${Number(maxPrice).toLocaleString('vi-VN')} ₫`;
+  };
+  // -----------------------------------
+
   return (
-    // 2. Bọc toàn bộ thẻ bằng Link
     <Link to={`/product/${product._id}`} className="card shadow-sm h-100 text-decoration-none text-dark">
       <img 
         src={Array.isArray(product.images) ? product.images[0] : product.image || '/placeholder.png'} 
@@ -29,16 +43,18 @@ const ProductCard = ({ product }) => {
       />
       <div className="card-body d-flex flex-column">
         <h6 className="card-title text-truncate" title={product.name}>{product.name}</h6>
+        
+        {/* SỬA PHẦN HIỂN THỊ GIÁ Ở ĐÂY */}
         <p className="card-text text-danger fw-bold mb-3">
-          {Number(product.price).toLocaleString('vi-VN')} ₫
+          {getPriceDisplay()}
         </p>
-        <div className="mt-auto d-flex justify-content-between">
-          {/* 3. Thêm nút "Xem" và sửa nút "Thêm" */}
-          <button onClick={handleAddToCart} className="btn btn-outline-primary btn-sm me-2">
-            <i className="bi bi-cart-plus"></i> Thêm
-          </button>
-          <button className="btn btn-secondary btn-sm">
-            Xem
+        
+        <div className="mt-auto">
+          <button 
+            onClick={handleBuyClick} 
+            className="btn btn-primary btn-sm w-100"
+          >
+            <i className="bi bi-cart-plus me-2"></i> Chọn mua
           </button>
         </div>
       </div>

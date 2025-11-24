@@ -104,24 +104,33 @@ const MyOrders = () => {
                 </tr>
             </thead>
             <tbody>
-                {selectedOrder.items.map(item => (
-                <tr key={item.product._id}>
-                    {/* 2. THÊM HÌNH ẢNH SẢN PHẨM */}
+                {selectedOrder.items.map((item, index) => (
+                <tr key={index}> {/* Dùng index làm key cho an toàn */}
                     <td>
                         <div className="d-flex align-items-center">
                             <img 
-                                src={item.product.images?.[0] || 'https://via.placeholder.com/50'} 
-                                alt={item.product.name}
+                                src={item.image || (item.product && item.product.images && item.product.images[0]) || 'https://via.placeholder.com/50'} 
+                                alt={item.name}
                                 style={{ width: '60px', height: '60px', objectFit: 'cover', marginRight: '15px', borderRadius: '4px', border: '1px solid #eee' }} 
                             />
                             <div>
-                                <div className="fw-bold">{item.product.name}</div>
+                                {/* Hiển thị tên sản phẩm đã lưu trong đơn hàng (snapshot) */}
+                                <div className="fw-bold">{item.name}</div>
+                                
+                                {/* Hiển thị biến thể */}
+                                {item.variantName && (
+                                    <div className="text-muted small">
+                                        Phân loại: <span className="badge bg-light text-dark border">{item.variantName}</span>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </td>
                     <td className="text-center">{item.quantity}</td>
-                    <td className="text-end">{item.product.price.toLocaleString()}đ</td>
-                    <td className="text-end">{(item.product.price * item.quantity).toLocaleString()}đ</td>
+                    
+                    {/* QUAN TRỌNG: Dùng item.price (giá lúc mua) thay vì item.product.price (giá hiện tại) */}
+                    <td className="text-end">{item.price.toLocaleString()}đ</td>
+                    <td className="text-end">{(item.price * item.quantity).toLocaleString()}đ</td>
                 </tr>
                 ))}
             </tbody>
