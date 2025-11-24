@@ -10,7 +10,27 @@ import { toast } from 'react-toastify';
 // === CÁC HÀM HELPER ===
 const getGuestCart = () => {
   const cart = localStorage.getItem('guestCart');
-  return cart ? JSON.parse(cart) : []; 
+  const parsedCart = cart ? JSON.parse(cart) : [];
+  
+  return parsedCart.map(item => {
+    // Nếu item.product đã là object (lưu đúng từ ProductDetail), giữ nguyên
+    // Nếu item.product là chuỗi ID (lưu kiểu cũ), cần fallback để không lỗi
+    const productData = typeof item.product === 'object' ? item.product : {};
+
+    return {
+      ...item,
+      _id: item._id || `${item.product._id || item.product}-${item.variantId}`, // Đảm bảo có _id cho key
+      product: {
+        _id: productData._id || item.product, // ID gốc
+        name: productData.name || item.name || 'Sản phẩm', // Tên
+        images: productData.images || item.images || [], // Ảnh
+        price: productData.price || 0 // Giá gốc
+      },
+      // Các trường quan trọng cho biến thể
+      variantName: item.variantName || '', 
+      price: item.price || productData.price || 0 // Giá biến thể
+    };
+  });
 };
 const saveGuestCart = (items) => {
   localStorage.setItem('guestCart', JSON.stringify(items));
@@ -31,11 +51,16 @@ const Cart = () => {
   const { isLoggedIn } = useAuth();
   const navigate = useNavigate();
 
-  // === HÀM TÍNH TOÁN TỔNG CƠ BẢN (Không bao gồm discount) ===
+  // 1. SỬA LOGIC TÍNH TỔNG: Dùng item.price thay vì item.product.price
   const calculateBaseTotals = (items, selectedIds) => {
-    const validItems = (items || []).filter(item => item && item.product && typeof item.product.price === 'number');
-    const itemsToCalc = validItems.filter(item => selectedIds.includes(item.product._id));
-    const subtotal = itemsToCalc.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
+    // Lọc những item hợp lệ
+    const validItems = (items || []).filter(item => item && item.product);
+    
+    // Lọc những item được chọn (so sánh theo item._id thay vì product._id)
+    const itemsToCalc = validItems.filter(item => selectedIds.includes(item._id));
+    
+    // Tính tổng: Dùng item.price (giá biến thể)
+    const subtotal = itemsToCalc.reduce((sum, item) => sum + ((item.price || item.product?.price || 0) * item.quantity), 0);
     
     const tax = subtotal > 0 ? subtotal * 0.1 : 0; 
     const shipping = subtotal > 0 ? 30000 : 0;
@@ -127,49 +152,65 @@ const Cart = () => {
 
   // === CÁC HÀM XỬ LÝ SỰ KIỆN ===
 
+  // 2. SỬA LOGIC SELECT ALL: Lưu item._id
   const handleSelectAll = (e) => {
     if (e.target.checked) {
-      setSelectedItems(cartItems.map(i => i.product._id));
+      setSelectedItems(cartItems.map(i => i._id)); // Dùng _id của cart item
     } else {
       setSelectedItems([]);
     }
   };
 
-  const handleSelectItem = (productId) => {
-    if (selectedItems.includes(productId)) {
-      setSelectedItems(selectedItems.filter(id => id !== productId));
+  // 3. SỬA LOGIC SELECT ITEM: Lưu item._id
+  const handleSelectItem = (itemId) => {
+    if (selectedItems.includes(itemId)) {
+      setSelectedItems(selectedItems.filter(id => id !== itemId));
     } else {
-      setSelectedItems([...selectedItems, productId]);
+      setSelectedItems([...selectedItems, itemId]);
     }
   };
 
-  const updateQuantity = async (productId, qty) => {
-    if (qty < 1) return removeItem(productId);
+  // 4. SỬA LOGIC UPDATE: Gửi itemId
+  const updateQuantity = async (itemId, qty) => {
+    if (qty < 1) return removeItem(itemId);
+
     try {
       if (isLoggedIn) {
-        await api.put('/cart/update', { productId: productId, quantity: qty });
+        await api.put('/cart/update', { itemId, quantity: qty });
+        loadCart();
       } else {
-        const items = getGuestCart();
-        const item = items.find(i => i.product._id === productId);
-        if (item) item.quantity = qty;
-        saveGuestCart(items);
+        // ==== GUEST LOGIC ====
+        let items = getGuestCart();
+        const item = items.find(x => x._id === itemId);
+        if (item) {
+          item.quantity = qty;
+          saveGuestCart(items);
+          setCartItems(items);
+        }
       }
-      loadCart(); // Load lại sẽ kích hoạt useEffect tính lại tiền
-    } catch (err) { toast.error('Lỗi cập nhật'); }
+    } catch (err) {
+      toast.error('Lỗi cập nhật');
+    }
   };
 
-  const removeItem = async (productId) => {
+  // 5. SỬA LOGIC REMOVE: Gửi itemId
+  const removeItem = async (itemId) => {
     try {
       if (isLoggedIn) {
-        await api.delete(`/cart/remove/${productId}`);
+        await api.delete(`/cart/remove/${itemId}`);
+        loadCart();
       } else {
+        // ==== GUEST LOGIC ====
         let items = getGuestCart();
-        items = items.filter(i => i.product._id !== productId);
+        items = items.filter(x => x._id !== itemId);
         saveGuestCart(items);
+
+        setSelectedItems(prev => prev.filter(id => id !== itemId));
+        setCartItems(items);
       }
-      setSelectedItems(prev => prev.filter(id => id !== productId));
-      loadCart();
-    } catch (err) { toast.error('Lỗi xóa'); }
+    } catch (err) {
+      toast.error('Lỗi xóa');
+    }
   };
 
   // Nút Áp dụng thủ công (bên cạnh input)
@@ -185,30 +226,10 @@ const Cart = () => {
         setTotals(prev => ({...prev, discount: 0, total: prev.subtotal + prev.tax + prev.shipping}));
     }
   };
-<<<<<<< HEAD
-  
-  const handleCheckout = async () => {
-    const itemsToCheck = cartItems
-      .filter(item => selectedItems.includes(item.product._id))
-      .map(item => ({
-        product: item.product._id,  // Chỉ gửi _id và quantity
-        quantity: item.quantity
-      }));
-
-    if (itemsToCheck.length === 0) {
-      return toast.error('Vui lòng chọn ít nhất 1 sản phẩm');
-    }
-=======
->>>>>>> ca73fa2 (huy update l2)
 
   // Load danh sách coupon
   const fetchCoupons = async () => {
     try {
-<<<<<<< HEAD
-      const res = await api.post('/cart/check-stock', { items: itemsToCheck });
-      if (res.data.success) {
-        // Tiếp tục sang checkout
-=======
       const { data } = await api.get('/coupons/available');
       setAvailableCoupons(data);
       setShowCouponModal(true);
@@ -234,21 +255,32 @@ const Cart = () => {
 
   const handleCheckout = async () => {
     const itemsToCheck = cartItems
-      .filter(item => selectedItems.includes(item.product._id))
-      .map(item => ({
-        product: item.product._id,
-        quantity: item.quantity
-      }));
+      // Lọc dựa trên item._id (ID dòng giỏ hàng) thay vì item.product._id
+      .filter(item => selectedItems.includes(item._id)) 
+      .map(item => {
+        // Lấy ID sản phẩm gốc an toàn (loại bỏ phần biến thể nếu có)
+        const rawId = item.product._id || item.product;
+        const cleanProductId = rawId.toString().split('-')[0];
+
+        return {
+          product: cleanProductId, 
+          quantity: item.quantity,
+          variantId: item.variantId 
+        };
+      });
+    // --------------------
 
     if (itemsToCheck.length === 0) return toast.error('Vui lòng chọn ít nhất 1 sản phẩm');
 
     try {
       const res = await api.post('/cart/check-stock', { items: itemsToCheck });
       if (res.data.success) {
->>>>>>> ca73fa2 (huy update l2)
         navigate('/checkout', { 
           state: { 
-            selectedItems: cartItems.filter(item => selectedItems.includes(item.product._id)),
+            // --- SỬA CẢ ĐOẠN NÀY NỮA ---
+            // Lọc đúng danh sách selectedItems để truyền sang trang Checkout
+            selectedItems: cartItems.filter(item => selectedItems.includes(item._id)),
+            // ---------------------------
             couponCode: coupon,
             discount: totals.discount 
           } 
@@ -286,35 +318,56 @@ const Cart = () => {
             </div>
           ) : (
             cartItems.map(item => (
-              <div key={item.product._id} className="card mb-3"> 
+              <div key={item._id} className="card mb-3"> 
                 <div className="card-body d-flex align-items-center">
                   <input 
                     type="checkbox" 
                     className="me-3 form-check-input" 
-                    checked={selectedItems.includes(item.product._id)}
-                    onChange={() => handleSelectItem(item.product._id)}
+                    checked={selectedItems.includes(item._id)} // Check theo item._id
+                    onChange={() => handleSelectItem(item._id)}
                   />
                   
-                  {/* [YC 1] LINK ĐẾN TRANG CHI TIẾT SẢN PHẨM */}
-                  <Link to={`/product/${item.product._id}`}>
-                      <img src={item.product.images[0]} alt={item.product.name} style={{ width: '80px', objectFit:'cover' }} className="me-3 rounded border" />
+                  <Link to={`/product/${(item.product._id || item.product).toString().split('-')[0]}`}>
+                      <img src={item.product.images ? item.product.images[0] : (item.images ? item.images[0] : '')} alt={item.product.name} style={{ width: '80px', objectFit:'cover' }} className="me-3 rounded border" />
                   </Link>
                   
                   <div className="flex-grow-1">
-                    {/* [YC 1] LINK ĐẾN TRANG CHI TIẾT SẢN PHẨM (TÊN) */}
-                    <Link to={`/product/${item.product._id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
-                        <h6 className="mb-1 hover-primary">{item.product.name}</h6>
+                    <Link to={`/product/${(item.product._id || item.product).toString().split('-')[0]}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                        {/* Tên sản phẩm */}
+                        <h6 className="mb-1 hover-primary fw-bold">
+                            {item.product.name || item.name}
+                        </h6>
+                        
+                        {/* --- PHẦN HIỂN THỊ PHIÊN BẢN (SỬA LẠI) --- */}
+                        {/* Luôn hiển thị nếu có variantName */}
+                        {item.variantName ? (
+                           <div className="text-muted small mb-1">
+                             Phân loại: <span className="badge bg-light text-dark border">{item.variantName}</span>
+                           </div>
+                        ) : (
+                           // Fallback nếu không có variantName nhưng có variantId (dữ liệu cũ)
+                           item.variantId && <div className="text-muted small">Phiên bản: {item.variantId}</div>
+                        )}
+                        {/* ------------------------------------------ */}
                     </Link>
-                    <p className="text-primary fw-bold">{item.product.price.toLocaleString()}đ</p>
+                    
+                    {/* Giá tiền */}
+                    <p className="text-primary fw-bold m-0">
+                      {(item.price || item.product.price || 0).toLocaleString()}đ
+                    </p>
                   </div>
 
                   <div className="d-flex align-items-center me-3">
-                    <button className="btn btn-sm btn-outline-secondary" onClick={() => updateQuantity(item.product._id, item.quantity - 1)}>-</button>
+                    <button className="btn btn-sm btn-outline-secondary" onClick={() => updateQuantity(item._id, item.quantity - 1)}>-</button>
                     <span className="mx-2" style={{width: '20px', textAlign:'center'}}>{item.quantity}</span>
-                    <button className="btn btn-sm btn-outline-secondary" onClick={() => updateQuantity(item.product._id, item.quantity + 1)}>+</button>
+                    <button className="btn btn-sm btn-outline-secondary" onClick={() => updateQuantity(item._id, item.quantity + 1)}>+</button>
                   </div>
-                  <h6 className="me-3 mb-0">{(item.product.price * item.quantity).toLocaleString()}đ</h6>
-                  <button className="btn btn-sm btn-outline-danger" onClick={() => removeItem(item.product._id)}><i className="bi bi-trash"></i></button>
+                  
+                  {/* --- SỬA ĐOẠN TÍNH TỔNG NÀY --- */}
+                  <h6 className="me-3">{((item.price || item.product.price) * item.quantity).toLocaleString()}đ</h6>
+                  {/* ------------------------------ */}
+                  
+                  <button className="btn btn-sm btn-outline-danger" onClick={() => removeItem(item._id || item.product._id)}><i className="bi bi-trash"></i></button>
                 </div>
               </div>
             ))
@@ -368,18 +421,10 @@ const Cart = () => {
         </div>
       </div>
       
-<<<<<<< HEAD
-      {/* MODAL DANH SÁCH MÃ GIẢM GIÁ (Giữ nguyên) */}
-      <Modal show={showCouponModal} onHide={() => setShowCouponModal(false)}>
-         {/* ... */}
-        <Modal.Header closeButton><Modal.Title>Mã giảm giá</Modal.Title></Modal.Header>
-        <Modal.Body>
-=======
       {/* MODAL COUPON */}
       <Modal show={showCouponModal} onHide={() => setShowCouponModal(false)} centered>
-        <Modal.Header closeButton><Modal.Title>Mã giảm giá</Modal.Title></Modal.Header>
+        <Modal.Header closeButton><Modal.Title>Mã giảm giá có sẵn</Modal.Title></Modal.Header>
         <Modal.Body style={{ maxHeight: '60vh', overflowY: 'auto' }}>
->>>>>>> ca73fa2 (huy update l2)
           <ListGroup variant="flush">
             {availableCoupons
               .filter(cp => cp.uses < cp.maxUses)
@@ -387,68 +432,6 @@ const Cart = () => {
                 <ListGroup.Item 
                   key={cp._id} 
                   action 
-<<<<<<< HEAD
-                  onClick={() => handleSelectCoupon(cp.code)}
-                  className="d-flex justify-content-between align-items-start"
-                >
-                  <div>
-                    <strong>{cp.code}</strong> - 
-                    <span className="text-danger ms-1">
-                      Giảm {cp.type === 'percent' ? `${cp.value}%` : `${cp.value.toLocaleString()}đ`}
-                    </span>
-
-                    <div className="text-muted small mt-2">
-                      <div>
-                        <strong>Đơn tối thiểu:</strong> {cp.minOrderValue.toLocaleString()}đ
-                      </div>
-                      <div>
-                        <strong>Số lần dùng còn lại:</strong> {cp.maxUses - cp.uses}/{cp.maxUses}
-                      </div>
-                      
-                      {/* Chỉ hiển thị "Áp dụng cho" nếu có danh mục cụ thể */}
-                      {cp.applicableCategories && cp.applicableCategories.length > 0 && (
-                        <div>
-                          <strong>Áp dụng cho:</strong>{' '}
-                          {Array.isArray(cp.applicableCategories)
-                            ? cp.applicableCategories
-                                .map(cat => (typeof cat === 'object' ? cat.name : cat))
-                                .filter(Boolean)
-                                .join(', ') || 'Không xác định'
-                            : 'Tất cả'}
-                        </div>
-                      )}
-                      
-                      {/* Không hiển thị HSD nếu không có expiryDate hoặc là null/undefined */}
-                      {cp.expiryDate && (
-                        <div>
-                          <strong>Hết hạn:</strong>{' '}
-                          {new Date(cp.expiryDate).toLocaleDateString('vi-VN')}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <Button 
-                    variant="outline-success" 
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation(); // Ngăn click toàn item
-                      handleSelectCoupon(cp.code);
-                    }}
-                  >
-                    Áp dụng
-                  </Button>
-                </ListGroup.Item>
-              ))
-            }
-            
-            {availableCoupons.filter(cp => cp.uses < cp.maxUses).length === 0 && (
-              <div className="text-center text-muted py-4">
-                Không có mã giảm giá nào khả dụng lúc này
-              </div>
-            )}
-=======
-                  // [YC 2] Click vào item cũng áp dụng luôn cho tiện
                   onClick={() => handleSelectCoupon(cp.code)}
                   className="d-flex justify-content-between align-items-center border rounded mb-2"
                 >
@@ -457,10 +440,25 @@ const Cart = () => {
                     <div className="text-danger fw-bold">
                        Giảm {cp.type === 'percent' ? `${cp.value}%` : `${cp.value.toLocaleString()}đ`}
                     </div>
-                    <div className="text-muted small" style={{fontSize: '0.85rem'}}>
-                      Đơn tối thiểu: {cp.minOrderValue.toLocaleString()}đ <br/>
-                      HSD: {cp.expiryDate ? new Date(cp.expiryDate).toLocaleDateString('vi-VN') : 'Vô thời hạn'}
+                    
+                    {/* --- PHẦN CHỈNH SỬA BẮT ĐẦU --- */}
+                    <div className="text-muted small mt-1" style={{fontSize: '0.85rem'}}>
+                      <div>Đơn tối thiểu: {cp.minOrderValue.toLocaleString()}đ</div>
+                      
+                      {/* Hiển thị danh mục áp dụng */}
+                      <div>
+                        Áp dụng: {cp.applicableCategories && cp.applicableCategories.length > 0 
+                          ? cp.applicableCategories.map(c => c.name).join(', ') 
+                          : 'Tất cả sản phẩm'}
+                      </div>
+
+                      {/* Hiển thị số lượt còn lại */}
+                      <div className="text-success">
+                        Còn lại: {cp.maxUses - cp.uses} lượt
+                      </div>
                     </div>
+                    {/* --- PHẦN CHỈNH SỬA KẾT THÚC --- */}
+
                   </div>
                   <Button variant="outline-success" size="sm" onClick={(e) => {
                       e.stopPropagation(); 
@@ -469,8 +467,7 @@ const Cart = () => {
                 </ListGroup.Item>
               ))
             }
-             {availableCoupons.length === 0 && <p className="text-center text-muted">Không có mã nào.</p>}
->>>>>>> ca73fa2 (huy update l2)
+             {availableCoupons.length === 0 && <p className="text-center text-muted">Không có mã nào phù hợp.</p>}
           </ListGroup>
         </Modal.Body>
       </Modal>

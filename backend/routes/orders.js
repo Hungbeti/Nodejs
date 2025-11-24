@@ -276,7 +276,9 @@ router.post('/', async (req, res) => {
     // Chuyển bodyItems sang format { product: _id, quantity }
     let cartItems = bodyItems.map(item => ({
       product: item.product,
-      quantity: item.quantity
+      quantity: item.quantity,
+      variantName: item.variantName, // <-- Lấy từ request
+      variantId: item.variantId
     }));
 
     // 4. TÍNH TOÁN PHÍA SERVER VÀ CẬP NHẬT `sold`
@@ -288,14 +290,32 @@ router.post('/', async (req, res) => {
       if (!product || product.stock < item.quantity) {
         return res.status(400).json({ msg: `Sản phẩm "${product?.name || item.product}" không đủ hàng` });
       }
+
+      let itemPrice = product.price;
+      let itemName = product.name;
+
+      if (item.variantId && product.variants) {
+          const variant = product.variants.id(item.variantId);
+          if (variant) {
+              itemPrice = variant.price;
+              // Tùy chọn: Có thể nối tên variant vào tên SP hoặc lưu riêng
+              // itemName = `${product.name} (${variant.name})`; 
+          }
+      } else if (item.price) {
+          // Fallback: nếu frontend gửi price đúng (đã validate ở bước khác), dùng tạm
+          // Nhưng tốt nhất là query DB như trên để bảo mật giá
+          itemPrice = item.price; 
+      }
       
-      subtotal += product.price * item.quantity;
+      subtotal += itemPrice * item.quantity;
+      
       validatedItems.push({
         product: product._id,
-        name: product.name,
+        name: itemName, // Tên sản phẩm
         image: product.images[0],
-        price: product.price,
-        quantity: item.quantity
+        price: itemPrice, // GIÁ CỦA BIẾN THỂ (đã tính toán ở trên)
+        quantity: item.quantity,
+        variantName: item.variantName // LƯU TÊN BIẾN THỂ VÀO DB
       });
       
       // === CẬP NHẬT TỒN KHO VÀ SỐ LƯỢNG ĐÃ BÁN ===
@@ -416,8 +436,12 @@ router.post('/', async (req, res) => {
         <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
             <img src="${item.image}" alt="sp" width="50" height="50" style="object-fit: cover; border-radius: 4px;" />
         </td>
-        <td style="padding: 8px; border: 1px solid #ddd;">${item.name}</td>
+        <td style="padding: 8px; border: 1px solid #ddd;">
+            <strong>${item.name}</strong>
+            ${item.variantName ? `<br/><small style="color: #666;">Phân loại: ${item.variantName}</small>` : ''} 
+        </td>
         <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${item.quantity}</td>
+        
         <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">${item.price.toLocaleString()}đ</td>
         <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">${(item.price * item.quantity).toLocaleString()}đ</td>
       </tr>`

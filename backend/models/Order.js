@@ -8,7 +8,10 @@ const orderItemSchema = new Schema({
   name: { type: String, required: true },
   image: { type: String },
   price: { type: Number, required: true },
-  quantity: { type: Number, required: true }
+  quantity: { type: Number, required: true },
+  // --- THÊM DÒNG NÀY ---
+  variantName: { type: String } // Lưu tên biến thể (VD: "27 inch")
+  // --------------------
 }, { _id: false });
 
 // Schema cho lịch sử trạng thái

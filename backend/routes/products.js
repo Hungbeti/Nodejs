@@ -6,7 +6,13 @@ const Category = require('../models/Category');
 const Brand = require('../models/Brand');
 const { protect, admin } = require('../middleware/auth');
 
-// GET tất cả sản phẩm (Đã sửa lỗi lọc và thêm sort)
+// Helper: Tính tổng tồn kho từ variants
+const calculateTotalStock = (variants) => {
+  if (!variants) return 0;
+  return variants.reduce((acc, curr) => acc + Number(curr.stock), 0);
+};
+
+// GET tất cả sản phẩm
 router.get('/', async (req, res) => {
   try {
     const {
@@ -17,7 +23,7 @@ router.get('/', async (req, res) => {
       maxPrice,
       sort,
       page = 1,
-      limit = 20 // Thêm limit có thể tùy chỉnh
+      limit = 20
     } = req.query;
 
     const skip = (page - 1) * limit;
@@ -61,16 +67,14 @@ router.get('/', async (req, res) => {
       if (maxPrice) query.price.$lte = Number(maxPrice);
     }
 
-    // === CẬP NHẬT SORT OPTIONS ===
     const sortOption = {
       nameAsc: { name: 1 },
       nameDesc: { name: -1 },
       priceAsc: { price: 1 },
       priceDesc: { price: -1 },
-      soldDesc: { sold: -1 },     // Hỗ trợ "Bán chạy nhất"
-      newest: { createdAt: -1 }   // Hỗ trợ "Sản phẩm mới"
-    }[sort] || { createdAt: -1 }; // Mặc định là mới nhất
-    // ===========================
+      soldDesc: { sold: -1 },
+      newest: { createdAt: -1 }
+    }[sort] || { createdAt: -1 };
     
     const products = await Product.find(query)
       .populate('category', 'name')
@@ -92,13 +96,13 @@ router.get('/', async (req, res) => {
   }
 });
 
-// === THÊM ROUTE MỚI CHO TRANG CHI TIẾT ===
+// GET chi tiết sản phẩm
 router.get('/:id', async (req, res) => {
   try {
     const product = await Product.findById(req.params.id)
       .populate('category', 'name')
       .populate('brand', 'name')
-      .populate('reviews.user', 'name'); // Lấy tên người review
+      .populate('reviews.user', 'name');
 
     if (!product) {
       return res.status(404).json({ msg: 'Không tìm thấy sản phẩm' });
@@ -110,111 +114,39 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// === THÊM ROUTE MỚI ĐỂ REVIEW SẢN PHẨM ===
-router.post('/:id/reviews', protect, async (req, res) => {
-  try {
-    const { rating, comment } = req.body;
-    
-    // 1. Kiểm tra đầu vào
-    if (!rating || !comment || comment.trim() === '') {
-      return res.status(400).json({ msg: 'Vui lòng cung cấp cả sao và bình luận.' });
-    }
-
-    const product = await Product.findById(req.params.id);
-    if (!product) return res.status(404).json({ msg: 'Không tìm thấy sản phẩm' });
-
-    // (Logic kiểm tra đã mua hàng)
-
-    const review = {
-      user: req.user._id,
-      name: req.user.name,
-      rating: Number(rating),
-      comment,
-    };
-
-    // 2. SỬA LỖI: Khởi tạo mảng nếu nó không tồn tại
-    if (!product.reviews) {
-      product.reviews = [];
-    }
-    // ===========================================
-
-    product.reviews.push(review);
-    
-    await product.save();
-    if (req.io) {
-      const newReview = product.reviews[product.reviews.length - 1];
-      req.io.to(req.params.id).emit('newReview', newReview);
-    }
-    res.status(201).json({ msg: 'Đã thêm đánh giá' });
-    
-  } catch (err) {
-    // Thêm log chi tiết
-    console.error('Lỗi POST /:id/reviews:', err); 
-    res.status(500).json({ msg: 'Lỗi server' });
-  }
-});
-
-// === THÊM ROUTE MỚI: BÌNH LUẬN (CHO KHÁCH) ===
-router.post('/:id/comments', async (req, res) => {
-  try {
-    const { name, comment } = req.body;
-    
-    // Khách thì BẮT BUỘC phải có Tên và Bình luận
-    if (!name || !comment || name.trim() === '' || comment.trim() === '') {
-      return res.status(400).json({ msg: 'Vui lòng cung cấp tên và bình luận.' });
-    }
-
-    const product = await Product.findById(req.params.id);
-    if (!product) return res.status(404).json({ msg: 'Không tìm thấy sản phẩm' });
-
-    const review = {
-      user: null, // Không có user
-      name: name, // Lấy tên từ form
-      rating: null, // Không có sao
-      comment,
-    };
-
-    if (!product.reviews) {
-      product.reviews = [];
-    }
-    product.reviews.push(review);
-    
-    await product.save();
-    if (req.io) {
-      const newComment = product.reviews[product.reviews.length - 1];
-      req.io.to(req.params.id).emit('newReview', newComment);
-    }
-    res.status(201).json({ msg: 'Đã thêm bình luận' });
-
-  } catch (err) {
-    console.error('Lỗi POST /:id/comments:', err); 
-    res.status(500).json({ msg: 'Lỗi server' });
-  }
-});
-
-// THÊM sản phẩm (admin)
+// THÊM SẢN PHẨM (Admin) - CẬP NHẬT LOGIC BIẾN THỂ
 router.post('/', protect, admin, async (req, res) => {
   try {
-    const { name, price, images, description, stock, category, brand } = req.body;
+    const { name, images, description, category, brand, variants } = req.body;
+    
+    // 1. Validate variants
+    if (!variants || !Array.isArray(variants) || variants.length < 2) {
+      return res.status(400).json({ msg: 'Sản phẩm phải có ít nhất 2 biến thể (VD: Màu sắc, Cấu hình...)' });
+    }
+
+    // 2. Tự động tính toán
+    const displayPrice = Math.min(...variants.map(v => Number(v.price))); // Giá thấp nhất
+    const totalStock = calculateTotalStock(variants); // Tổng tồn kho
+
     const existingProduct = await Product.findOne({ 
       name: { $regex: `^${name}$`, $options: 'i' } 
     });
-    
     if (existingProduct) {
       return res.status(400).json({ msg: 'Tên sản phẩm này đã tồn tại' });
     }
-    if (category) {
-      const cat = await Category.findById(category);
-      if (!cat) return res.status(400).json({ msg: 'Danh mục không tồn tại' });
-    }
-    if (brand) {
-      const b = await Brand.findById(brand);
-      if (!b) return res.status(400).json({ msg: 'Thương hiệu không tồn tại' });
-    }
 
-    const product = new Product({ name, price, images, description, stock, category, brand });
+    const product = new Product({ 
+      name, 
+      price: displayPrice, // Lưu giá thấp nhất
+      images, 
+      description, 
+      stock: totalStock,   // Lưu tổng kho
+      category, 
+      brand,
+      variants             // Lưu chi tiết
+    });
+
     await product.save();
-
     const populated = await Product.findById(product._id)
       .populate('category', 'name')
       .populate('brand', 'name');
@@ -222,27 +154,28 @@ router.post('/', protect, admin, async (req, res) => {
     res.status(201).json(populated);
   } catch (err) {
     console.error('Lỗi POST /products:', err);
-    res.status(500).json({ msg: 'Lỗi server' });
+    res.status(500).json({ msg: err.message || 'Lỗi server' });
   }
 });
 
-// CẬP NHẬT sản phẩm (admin)
+// CẬP NHẬT SẢN PHẨM (Admin) - CẬP NHẬT LOGIC BIẾN THỂ
 router.put('/:id', protect, admin, async (req, res) => {
   try {
-    const { category, brand } = req.body;
+    const { variants } = req.body;
+    let updateData = { ...req.body };
 
-    if (category) {
-      const cat = await Category.findById(category);
-      if (!cat) return res.status(400).json({ msg: 'Danh mục không tồn tại' });
-    }
-    if (brand) {
-      const b = await Brand.findById(brand);
-      if (!b) return res.status(400).json({ msg: 'Thương hiệu không tồn tại' });
+    // Nếu có cập nhật variants, tính lại price và stock
+    if (variants && variants.length > 0) {
+      if (variants.length < 2) {
+         return res.status(400).json({ msg: 'Phải giữ lại ít nhất 2 biến thể' });
+      }
+      updateData.price = Math.min(...variants.map(v => Number(v.price)));
+      updateData.stock = calculateTotalStock(variants);
     }
 
     const updated = await Product.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      updateData,
       { new: true }
     ).populate('category', 'name').populate('brand', 'name');
 
@@ -255,16 +188,74 @@ router.put('/:id', protect, admin, async (req, res) => {
   }
 });
 
-// XÓA sản phẩm (admin)
+// XÓA SẢN PHẨM (Admin)
 router.delete('/:id', protect, admin, async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
-    if (!product) return res.status(4404).json({ msg: 'Không tìm thấy sản phẩm' });
+    if (!product) return res.status(404).json({ msg: 'Không tìm thấy sản phẩm' });
 
     await Product.findByIdAndDelete(req.params.id);
     res.json({ msg: 'Đã xóa sản phẩm' });
   } catch (err) {
     console.error('Lỗi DELETE /products:', err);
+    res.status(500).json({ msg: 'Lỗi server' });
+  }
+});
+
+// CÁC ROUTE REVIEW/COMMENT (Giữ nguyên)
+router.post('/:id/reviews', protect, async (req, res) => {
+  try {
+    const { rating, comment } = req.body;
+    if (!rating || !comment || comment.trim() === '') {
+      return res.status(400).json({ msg: 'Vui lòng cung cấp cả sao và bình luận.' });
+    }
+    const product = await Product.findById(req.params.id);
+    if (!product) return res.status(404).json({ msg: 'Không tìm thấy sản phẩm' });
+
+    if (!product.reviews) product.reviews = [];
+    
+    product.reviews.push({
+      user: req.user._id,
+      name: req.user.name,
+      rating: Number(rating),
+      comment,
+    });
+    
+    await product.save();
+    if (req.io) {
+      const newReview = product.reviews[product.reviews.length - 1];
+      req.io.to(req.params.id).emit('newReview', newReview);
+    }
+    res.status(201).json({ msg: 'Đã thêm đánh giá' });
+  } catch (err) {
+    res.status(500).json({ msg: 'Lỗi server' });
+  }
+});
+
+router.post('/:id/comments', async (req, res) => {
+  try {
+    const { name, comment } = req.body;
+    if (!name || !comment || name.trim() === '' || comment.trim() === '') {
+      return res.status(400).json({ msg: 'Vui lòng cung cấp tên và bình luận.' });
+    }
+    const product = await Product.findById(req.params.id);
+    if (!product) return res.status(404).json({ msg: 'Không tìm thấy sản phẩm' });
+
+    if (!product.reviews) product.reviews = [];
+    product.reviews.push({
+      user: null,
+      name: name,
+      rating: null,
+      comment,
+    });
+    
+    await product.save();
+    if (req.io) {
+      const newComment = product.reviews[product.reviews.length - 1];
+      req.io.to(req.params.id).emit('newReview', newComment);
+    }
+    res.status(201).json({ msg: 'Đã thêm bình luận' });
+  } catch (err) {
     res.status(500).json({ msg: 'Lỗi server' });
   }
 });

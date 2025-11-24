@@ -1,150 +1,109 @@
 // backend/controllers/cartController.js
 const Cart = require('../models/Cart');
 const Product = require('../models/Product');
-const User = require('../models/User');
-const jwt = require('jsonwebtoken');
+// const User = require('../models/User');
+// const jwt = require('jsonwebtoken');
 
-/**
- * Lấy giỏ hàng của người dùng (đã đăng nhập).
- * Sẽ tự động tạo giỏ hàng nếu chưa có.
- * GET /api/cart
- */
+// GET: Lấy giỏ hàng
 exports.getCart = async (req, res) => {
   try {
-    // req.user._id được cung cấp bởi middleware 'protect'
-    let cart = await Cart.findOne({ user: req.user._id }).populate(
-      'items.product'
-    );
-
+    let cart = await Cart.findOne({ user: req.user._id }).populate('items.product');
     if (!cart) {
-      // Nếu user này chưa có giỏ hàng, tạo một giỏ trống cho họ
       cart = new Cart({ user: req.user._id, items: [] });
       await cart.save();
     }
-
     res.json(cart);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ msg: 'Lỗi server khi lấy giỏ hàng' });
+    res.status(500).json({ msg: 'Lỗi server' });
   }
 };
 
-/**
- * Thêm sản phẩm vào giỏ hàng (đã đăng nhập).
- * POST /api/cart/add
- */
+// POST: Thêm vào giỏ
 exports.addToCart = async (req, res) => {
-  const { productId, quantity = 1 } = req.body;
+  // Nhận thêm variantId, variantName, price từ Frontend gửi lên
+  const { productId, quantity = 1, variantId, variantName, price } = req.body;
   const userId = req.user._id;
 
   try {
-    // 1. Kiểm tra sản phẩm có tồn tại không
-    const product = await Product.findById(productId);
-    if (!product) {
-      return res.status(404).json({ msg: 'Không tìm thấy sản phẩm' });
-    }
-
-    // 2. Tìm giỏ hàng của người dùng
     let cart = await Cart.findOne({ user: userId });
-
-    // 3. Nếu không có giỏ hàng, tạo giỏ hàng mới
     if (!cart) {
-      cart = new Cart({
-        user: userId,
-        items: [{ product: productId, quantity: quantity }],
+      cart = new Cart({ user: userId, items: [] });
+    }
+
+    // 1. Tìm xem sản phẩm VỚI BIẾN THỂ ĐÓ đã có trong giỏ chưa
+    const existingItemIndex = cart.items.findIndex(item => 
+      item.product.toString() === productId && item.variantId === variantId
+    );
+
+    if (existingItemIndex > -1) {
+      // Nếu đã có đúng biến thể đó -> Tăng số lượng
+      cart.items[existingItemIndex].quantity += quantity;
+    } else {
+      // Nếu chưa có -> Thêm mới với thông tin biến thể và giá riêng
+      cart.items.push({ 
+        product: productId, 
+        quantity, 
+        variantId, 
+        variantName,
+        price: price // Quan trọng: Lưu giá của biến thể
       });
-    } else {
-      // 4. Nếu có giỏ hàng, kiểm tra xem sản phẩm đã tồn tại trong giỏ chưa
-      const existingItem = cart.items.find(
-        (item) => item.product.toString() === productId
-      );
-
-      if (existingItem) {
-        // Nếu đã có, chỉ cập nhật số lượng
-        existingItem.quantity += quantity;
-      } else {
-        // Nếu chưa có, thêm vào mảng items
-        cart.items.push({ product: productId, quantity: quantity });
-      }
     }
 
-    // 5. LƯU LẠI GIỎ HÀNG VÀO DATABASE
     await cart.save();
-
-    // 6. Trả về giỏ hàng đã populate để cập nhật UI
-    const populatedCart = await Cart.findById(cart._id).populate(
-      'items.product'
-    );
+    const populatedCart = await Cart.findById(cart._id).populate('items.product');
     res.status(200).json(populatedCart);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ msg: 'Lỗi server khi thêm vào giỏ hàng' });
-  }
-};
-
-/**
- * Cập nhật số lượng sản phẩm
- * PUT /api/cart/update
- */
-exports.updateCartItem = async (req, res) => {
-  const { productId, quantity } = req.body;
-
-  // Số lượng phải lớn hơn 0
-  if (quantity < 1) {
-    // Nếu số lượng < 1, hãy coi như đây là một yêu cầu xóa
-    const newReq = { ...req, params: { id: productId } };
-    return exports.removeFromCart(newReq, res);
-  }
-
-  try {
-    const cart = await Cart.findOne({ user: req.user._id });
-    if (!cart)
-      return res.status(404).json({ msg: 'Không tìm thấy giỏ hàng' });
-
-    const item = cart.items.find(
-      (item) => item.product.toString() === productId
-    );
-    if (item) {
-      item.quantity = quantity;
-      await cart.save();
-      const populatedCart = await Cart.findById(cart._id).populate(
-        'items.product'
-      );
-      res.json(populatedCart);
-    } else {
-      res.status(404).json({ msg: 'Không tìm thấy sản phẩm trong giỏ' });
-    }
   } catch (err) {
     console.error(err);
     res.status(500).json({ msg: 'Lỗi server' });
   }
 };
 
-/**
- * Xóa sản phẩm khỏi giỏ hàng
- * DELETE /api/cart/remove/:id
- */
-exports.removeFromCart = async (req, res) => {
-  // Lấy ID sản phẩm từ params, khớp với frontend
-  const productId = req.params.id;
+// PUT: Cập nhật số lượng
+exports.updateCartItem = async (req, res) => {
+  // Frontend cần gửi itemId (cartItem._id) thay vì productId
+  const { itemId, quantity } = req.body; 
+
+  if (quantity < 1) {
+     // Gọi hàm xóa nếu số lượng < 1
+     req.params.id = itemId; 
+     return exports.removeFromCart(req, res);
+  }
 
   try {
     const cart = await Cart.findOne({ user: req.user._id });
-    if (!cart)
-      return res.status(404).json({ msg: 'Không tìm thấy giỏ hàng' });
+    if (!cart) return res.status(404).json({ msg: 'Không tìm thấy giỏ' });
 
-    // Lọc ra sản phẩm cần xóa
-    cart.items = cart.items.filter(
-      (item) => item.product.toString() !== productId
-    );
+    // Tìm item theo ID của dòng trong giỏ (Unique cho từng biến thể)
+    const item = cart.items.id(itemId); 
+    
+    if (item) {
+      item.quantity = quantity;
+      await cart.save();
+      const populatedCart = await Cart.findById(cart._id).populate('items.product');
+      res.json(populatedCart);
+    } else {
+      res.status(404).json({ msg: 'Không tìm thấy sản phẩm' });
+    }
+  } catch (err) {
+    res.status(500).json({ msg: 'Lỗi server' });
+  }
+};
+
+// DELETE: Xóa sản phẩm (Dùng Item ID)
+exports.removeFromCart = async (req, res) => {
+  const itemId = req.params.id; // Đây là cartItem._id
+
+  try {
+    const cart = await Cart.findOne({ user: req.user._id });
+    if (!cart) return res.status(404).json({ msg: 'Không tìm thấy giỏ' });
+
+    // Xóa item theo ID
+    cart.items.pull({ _id: itemId });
 
     await cart.save();
-    const populatedCart = await Cart.findById(cart._id).populate(
-      'items.product'
-    );
+    const populatedCart = await Cart.findById(cart._id).populate('items.product');
     res.json(populatedCart);
   } catch (err) {
-    console.error(err);
     res.status(500).json({ msg: 'Lỗi server' });
   }
 };

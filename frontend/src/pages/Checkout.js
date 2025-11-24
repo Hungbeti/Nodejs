@@ -14,11 +14,20 @@ const clearGuestCart = () => { localStorage.removeItem('guestCart'); };
 
 const calculateTotals = (items, discount = 0) => {
   if (!Array.isArray(items)) items = [];
-  const validItems = items.filter(item => item && item.product && typeof item.product.price === 'number');
-  const subtotal = validItems.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
+  
+  // Lọc các item hợp lệ (có thông tin sản phẩm)
+  const validItems = items.filter(item => item && (item.product || item.product?._id));
+
+  const subtotal = validItems.reduce((sum, item) => {
+    // QUAN TRỌNG: Lấy giá ưu tiên từ item.price (giá biến thể)
+    const price = item.price || item.product?.price || 0;
+    return sum + (price * item.quantity);
+  }, 0);
+
   const tax = subtotal * 0.1; 
   const shipping = 30000; 
   const total = subtotal - discount + tax + shipping;
+  
   return { items: validItems, subtotal, discount, tax, shipping, total };
 };
 
@@ -70,6 +79,16 @@ const Checkout = () => {
           cartData = getGuestCart();
           if (cartData.length === 0) return navigate('/cart');
       }
+
+      cartData = cartData.map(item => ({
+          ...item,
+          // Đảm bảo product luôn là object (đề phòng trường hợp Guest lưu ID string)
+          product: typeof item.product === 'string' 
+              ? { _id: item.product, name: 'Đang tải...', price: 0, images: [] } 
+              : item.product,
+          // Đảm bảo price luôn có giá trị
+          price: item.price || item.product?.price || 0
+      }));
       
       // Tính toán tổng tiền
       const calcs = calculateTotals(cartData, discount);
@@ -137,8 +156,10 @@ const Checkout = () => {
 
         shippingAddress = {
           name: shipping.name.trim(),
-          email: shipping.email.trim(),
-          phone: shipping.phone.replace(/[\s-]/g, ''), // Chuẩn hóa số điện thoại
+          // NẾU ĐÃ ĐĂNG NHẬP -> DÙNG EMAIL CỦA USER
+          // NẾU CHƯA ĐĂNG NHẬP -> DÙNG EMAIL NHẬP TỪ FORM
+          email: isLoggedIn ? userEmail : shipping.email.trim(), 
+          phone: shipping.phone.replace(/[\s-]/g, ''),
           address: shipping.addressLine.trim()
         };
       } else {
@@ -159,19 +180,22 @@ const Checkout = () => {
 
       const orderData = {
         items: items.map(i => ({
-          product: i.product._id,
-          name: i.product.name,
+          product: i.product._id || i.product, // ID sản phẩm
+          name: i.product.name || i.name,      // Tên sản phẩm
           quantity: i.quantity,
-          price: i.product.price
+          
+          // QUAN TRỌNG: Phải lấy giá từ item.price (giá biến thể) 
+          // KHÔNG ĐƯỢC lấy i.product.price (giá gốc)
+          price: i.price, 
+
+          // QUAN TRỌNG: Phải gửi kèm thông tin biến thể
+          variantId: i.variantId,
+          variantName: i.variantName
         })),
         shippingAddress,
         paymentMethod: payment,
-        couponCode: coupon || undefined, // Giữ nguyên, backend sẽ bỏ nếu undefined
-<<<<<<< HEAD
-        usePoints: usePoints ? pointsToUse : 0
-=======
+        couponCode: coupon || undefined,
         loyaltyPointsUsed: usePoints ? pointsToUse : 0
->>>>>>> ca73fa2 (huy update l2)
       };
 
       console.log('Order data gửi đi:', orderData); // Debug
@@ -400,12 +424,31 @@ const Checkout = () => {
             <ul className="list-group list-group-flush">
               {items.map((item, index) => (
                 <li key={index} className="list-group-item d-flex align-items-center">
-                  <img src={item.product.images?.[0] || '/placeholder.png'} alt={item.product.name} style={{ width: '50px', height: '50px', objectFit: 'cover', marginRight: '15px' }} />
+                  <img 
+                    src={item.product.images?.[0] || '/placeholder.png'} 
+                    alt={item.product.name} 
+                    style={{ width: '50px', height: '50px', objectFit: 'cover', marginRight: '15px' }} 
+                  />
+                  
                   <div className="flex-grow-1">
-                    <h6 className="mb-0 text-truncate" style={{ maxWidth: '300px' }}>{item.product.name}</h6>
+                    <h6 className="mb-0 text-truncate" style={{ maxWidth: '300px' }}>
+                        {item.product.name || item.name}
+                    </h6>
+                    
+                    {/* --- THÊM ĐOẠN NÀY ĐỂ HIỂN THỊ BIẾN THỂ --- */}
+                    {item.variantName && (
+                        <small className="text-muted d-block">
+                            Phân loại: <span className="fw-bold text-dark">{item.variantName}</span>
+                        </small>
+                    )}
+                    {/* ----------------------------------------- */}
+
                     <small className="text-muted">Số lượng: {item.quantity}</small>
                   </div>
-                  <span className="fw-bold">{(item.product.price * item.quantity).toLocaleString()}đ</span>
+                  
+                  <span className="fw-bold">
+                    {((item.price || item.product.price || 0) * item.quantity).toLocaleString()}đ
+                  </span>
                 </li>
               ))}
             </ul>
