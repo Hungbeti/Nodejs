@@ -33,6 +33,7 @@ jobs:
     #     npm test
 
   # --- JOB 2: KIỂM TRA FRONTEND ---
+  # --- JOB 2: KIỂM TRA FRONTEND ---
   build-frontend:
     runs-on: ubuntu-latest
     
@@ -46,11 +47,11 @@ jobs:
         node-version: '18'
 
     - name: Install Frontend Dependencies
-      # Nếu file package.json của frontend nằm ở root thì không cần cd
-      # Nếu nằm trong folder 'frontend' thì thêm: cd frontend
-      run: npm install --legacy-peer-deps 
+      run: |
+        cd frontend
+        npm install --legacy-peer-deps 
 
     - name: Build Frontend React
-      # Lệnh này cực quan trọng: Nó kiểm tra xem React có build ra file tĩnh được không
-      # Nếu code React lỗi cú pháp, bước này sẽ BÁO ĐỎ (Failed)
-      run: npm run build
+      run: |
+        cd frontend
+        npm run build
