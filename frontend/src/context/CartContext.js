@@ -102,10 +102,34 @@ export const CartProvider = ({ children }) => {
     setCartCount(getCartCount(items));
   };
 
+  const updateGuestItem = (itemId, quantity) => {
+    let items = getGuestCart();
+    const item = items.find(x => x._id === itemId);
+    if (item) {
+      item.quantity = quantity;
+      saveGuestCart(items);
+      setCartCount(getCartCount(items)); // Cập nhật ngay lập tức
+    }
+  };
+
+  // --- THÊM MỚI: HÀM REMOVE CHO GUEST ---
+  const removeGuestItem = (itemId) => {
+    let items = getGuestCart();
+    items = items.filter(x => x._id !== itemId);
+    saveGuestCart(items);
+    setCartCount(getCartCount(items)); // Cập nhật ngay lập tức
+  };
+
   // ===============================================
 
   return (
-    <CartContext.Provider value={{ cartCount, fetchCartCount, addToCart }}>
+    <CartContext.Provider value={{ 
+        cartCount, 
+        fetchCartCount, 
+        addToCart, 
+        updateGuestItem, // Export hàm này
+        removeGuestItem  // Export hàm này
+    }}>
       {children}
     </CartContext.Provider>
   );

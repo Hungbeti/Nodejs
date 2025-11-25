@@ -47,7 +47,7 @@ const Cart = () => {
   const [showCouponModal, setShowCouponModal] = useState(false);
   const [availableCoupons, setAvailableCoupons] = useState([]);
   
-  const { fetchCartCount } = useCart();
+  const { fetchCartCount, updateGuestItem, removeGuestItem } = useCart();
   const { isLoggedIn } = useAuth();
   const navigate = useNavigate();
 
@@ -178,15 +178,11 @@ const Cart = () => {
       if (isLoggedIn) {
         await api.put('/cart/update', { itemId, quantity: qty });
         loadCart();
+        fetchCartCount();
       } else {
         // ==== GUEST LOGIC ====
-        let items = getGuestCart();
-        const item = items.find(x => x._id === itemId);
-        if (item) {
-          item.quantity = qty;
-          saveGuestCart(items);
-          setCartItems(items);
-        }
+        updateGuestItem(itemId, qty); // Gọi Context để update cả Storage và Badge
+        loadCart();
       }
     } catch (err) {
       toast.error('Lỗi cập nhật');
@@ -199,14 +195,14 @@ const Cart = () => {
       if (isLoggedIn) {
         await api.delete(`/cart/remove/${itemId}`);
         loadCart();
+        fetchCartCount();
       } else {
         // ==== GUEST LOGIC ====
-        let items = getGuestCart();
-        items = items.filter(x => x._id !== itemId);
-        saveGuestCart(items);
-
+        removeGuestItem(itemId); // Gọi Context
+        
+        // Cập nhật UI trang Cart
         setSelectedItems(prev => prev.filter(id => id !== itemId));
-        setCartItems(items);
+        loadCart();
       }
     } catch (err) {
       toast.error('Lỗi xóa');

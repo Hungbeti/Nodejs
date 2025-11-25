@@ -1,3 +1,4 @@
+//src/components/NavbarAdmin.js
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -27,7 +28,7 @@ const NavbarAdmin = () => {
 >
   <div
     className="container-fluid px-4 d-flex justify-content-between align-items-center"
-    style={{ height: '60px', margin: 0 }}
+    style={{ height: '35px', margin: 0 }}
   >
     <Link className="navbar-brand fw-bold text-white" to="/admin">
       PC Shop

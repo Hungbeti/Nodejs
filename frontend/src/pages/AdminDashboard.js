@@ -1,11 +1,14 @@
 // src/pages/AdminDashboard.js
 import React, { useState, useEffect } from 'react';
-import { Link, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
+import { Link, Routes, Route, useLocation } from 'react-router-dom';
 import { 
-  BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell 
+  ComposedChart, Line, Area, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
+  PieChart, Pie, Cell, BarChart 
 } from 'recharts';
 import NavbarAdmin from '../components/NavbarAdmin';
 import api from '../services/api';
+
+// Import các trang con
 import AdminProducts from './admin/Products';
 import Users from './admin/Users';
 import Orders from './admin/Orders';
@@ -13,15 +16,25 @@ import Coupons from './admin/Coupons';
 
 const AdminDashboard = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [stats, setStats] = useState({});
-  const [revenueData, setRevenueData] = useState([]);
+  
+  // State dữ liệu thống kê
+  const [stats, setStats] = useState({
+    totalUsers: 0,
+    newUsers: 0,
+    totalOrders: 0,
+    revenue: 0,
+    profit: 0
+  });
+  const [chartData, setChartData] = useState([]);
   const [pieData, setPieData] = useState([]);
   const [topProducts, setTopProducts] = useState([]);
-  const [timeRange, setTimeRange] = useState('year'); // year, quarter, month, week, custom
+  
+  // State bộ lọc
+  const [timeRange, setTimeRange] = useState('year'); 
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
+  
   const location = useLocation();
-  const navigate = useNavigate();
 
   const menuItems = [
     { icon: 'bi-speedometer2', label: 'Tổng quan', path: '/admin' },
@@ -31,238 +44,236 @@ const AdminDashboard = () => {
     { icon: 'bi-tag', label: 'Quản lý mã giảm giá', path: '/admin/coupons' },
   ];
 
-  // TẢI DỮ LIỆU THEO KHOẢNG THỜI GIAN
+  // === HÀM LẤY DỮ LIỆU THẬT TỪ API ===
   const fetchStats = async () => {
     try {
-      const params = { range: timeRange };
-      if (timeRange === 'custom') {
-        params.start = customStart;
-        params.end = customEnd;
+      const params = { 
+        range: timeRange,
+        start: timeRange === 'custom' ? customStart : undefined,
+        end: timeRange === 'custom' ? customEnd : undefined
+      };
+
+      // Gọi API thống kê (Bạn cần đảm bảo backend đã có route này)
+      // Ví dụ: GET /api/admin/stats
+      const { data } = await api.get('/admin/stats', { params });
+
+      if (data) {
+        setStats(data.overview || { totalUsers: 0, newUsers: 0, totalOrders: 0, revenue: 0, profit: 0 });
+        setChartData(data.chart || []);
+        setPieData(data.pie || []);
+        setTopProducts(data.topProducts || []);
       }
-      const res = await api.get('/admin/stats', { params });
-      setStats(res.data.stats);
-      setRevenueData(res.data.revenue);
-      setPieData(res.data.categories);
-      setTopProducts(res.data.topProducts);
     } catch (err) {
-      // DỮ LIỆU MẪU KHI CHƯA CÓ API
-      setStats({
-        totalUsers: 1247,
-        newUsers: 89,
-        totalOrders: 342,
-        revenue: 487290000,
-        profit: 187290000,
-      });
-      setRevenueData([
-        { period: 'T1', revenue: 65000000, profit: 25000000, orders: 68 },
-        { period: 'T2', revenue: 72000000, profit: 30000000, orders: 75 },
-        { period: 'T3', revenue: 68000000, profit: 28000000, orders: 70 },
-        { period: 'T4', revenue: 85000000, profit: 35000000, orders: 88 },
-        { period: 'T5', revenue: 92000000, profit: 42000000, orders: 95 },
-        { period: 'T6', revenue: 78000000, profit: 33000000, orders: 81 },
-      ]);
-      setPieData([
-        { name: 'Laptop', value: 45, color: '#007bff' },
-        { name: 'PC', value: 20, color: '#28a745' },
-        { name: 'Màn hình', value: 18, color: '#ffc107' },
-        { name: 'Phụ kiện', value: 17, color: '#dc3545' },
-      ]);
-      setTopProducts([
-        { name: 'Laptop Dell Inspiron 15', sales: 45 },
-        { name: 'Laptop Asus ROG Strix', sales: 38 },
-        { name: 'Màn hình Samsung 27"', sales: 29 },
-      ]);
+      console.error("Lỗi tải thống kê:", err);
+      // Không fallback về dữ liệu giả nữa để tránh hiểu nhầm
     }
   };
 
   useEffect(() => {
+    // Nếu chọn custom nhưng chưa chọn ngày thì chưa gọi API
+    if (timeRange === 'custom' && (!customStart || !customEnd)) return;
+    
     fetchStats();
   }, [timeRange, customStart, customEnd]);
+
+  // Helper format tiền tệ
+  const formatCurrency = (value) => {
+    if (value >= 1000000000) return `${(value / 1000000000).toFixed(1)} tỷ`;
+    if (value >= 1000000) return `${(value / 1000000).toFixed(0)}tr`;
+    return value.toLocaleString();
+  };
 
   return (
     <div className="d-flex flex-column min-vh-100 bg-light">
       <NavbarAdmin />
-      <div className="flex-grow-1 p-4 overflow-auto" style={{ marginTop: '13px' }}>
-        <div className="d-flex flex-grow-1">
+      
+      <div className="flex-grow-1 d-flex overflow-hidden" style={{ marginTop: '0px' }}>
+        
         {/* SIDEBAR */}
         <div
-          className={`bg-white border-end shadow-sm transition-all ${sidebarOpen ? 'w-25' : 'w-auto'} p-3`}
-          style={{ minWidth: sidebarOpen ? '260px' : '70px' }}
+          className={`bg-white border-end shadow-sm transition-all ${sidebarOpen ? 'w-25' : 'w-auto'} d-flex flex-column`}
+          style={{ minWidth: sidebarOpen ? '260px' : '70px', transition: 'width 0.3s' }}
         >
-          <div className="d-flex align-items-center justify-content-between mb-4">
-            <h5 className={`mb-0 fw-bold text-primary ${!sidebarOpen && 'd-none'}`}>Quản lý</h5>
-            <button
-              className="btn btn-outline-secondary btn-sm rounded-circle"
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-            >
+          <div className="p-3 d-flex align-items-center justify-content-between">
+            <h5 className={`mb-0 fw-bold text-primary text-truncate ${!sidebarOpen && 'd-none'}`}>Quản trị viên</h5>
+            <button className="btn btn-sm btn-light border" onClick={() => setSidebarOpen(!sidebarOpen)}>
               <i className={`bi ${sidebarOpen ? 'bi-chevron-left' : 'bi-chevron-right'}`}></i>
             </button>
           </div>
-
-          <ul className="nav flex-column">
+          <hr className="my-0"/>
+          <ul className="nav flex-column p-2">
             {menuItems.map((item, idx) => (
-              <li key={idx} className="nav-item mb-2">
+              <li key={idx} className="nav-item mb-1">
                 <Link
                   to={item.path}
-                  className={`nav-link d-flex align-items-center p-3 rounded-3 transition-all ${
-                    location.pathname === item.path 
-                      ? 'bg-primary text-white shadow-sm' 
-                      : 'text-dark hover-bg-light'
+                  className={`nav-link d-flex align-items-center px-3 py-3 rounded ${
+                    location.pathname === item.path ? 'bg-primary text-white shadow-sm' : 'text-dark hover-bg-light'
                   }`}
                 >
                   <i className={`bi ${item.icon} fs-5 ${sidebarOpen ? 'me-3' : ''}`}></i>
-                  {sidebarOpen && <span className="fw-medium">{item.label}</span>}
+                  {sidebarOpen && <span>{item.label}</span>}
                 </Link>
               </li>
             ))}
           </ul>
         </div>
 
-        {/* MAIN CONTENT */}
-        <div className="flex-grow-1 p-4 overflow-auto">
+        {/* MAIN CONTENT AREA */}
+        <div className="flex-grow-1 p-4 overflow-auto" style={{ height: 'calc(100vh - 60px)' }}>
           <Routes>
-            {/* TỔNG QUAN */}
             <Route path="/" element={
-              <div>
-                <div className="d-flex justify-content-between align-items-center mb-4">
-                  <h2 className="text-primary fw-bold">Bảng điều khiển</h2>
-                  <div className="d-flex gap-2">
-                    <select
-                      className="form-select form-select-sm"
-                      value={timeRange}
-                      onChange={(e) => setTimeRange(e.target.value)}
-                    >
-                      <option value="year">Năm nay</option>
-                      <option value="quarter">Quý này</option>
-                      <option value="month">Tháng này</option>
-                      <option value="week">Tuần này</option>
-                      <option value="custom">Tùy chỉnh</option>
-                    </select>
-                    {timeRange === 'custom' && (
-                      <>
-                        <input type="date" className="form-control form-control-sm" value={customStart} onChange={(e) => setCustomStart(e.target.value)} />
-                        <input type="date" className="form-control form-control-sm" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} />
-                      </>
-                    )}
+              <div className="container-fluid">
+                
+                {/* --- PHẦN 1: BẢNG ĐIỀU KHIỂN ĐƠN GIẢN --- */}
+                <div className="mb-5">
+                  <h4 className="text-primary fw-bold mb-3"><i className="bi bi-grid-fill me-2"></i>Tổng quan hiệu suất</h4>
+                  <div className="row g-3">
+                    {[
+                      { title: 'Tổng người dùng', val: stats.totalUsers, sub: `+${stats.newUsers} mới`, icon: 'bi-people-fill', color: 'primary' },
+                      { title: 'Tổng đơn hàng', val: stats.totalOrders, sub: 'Đã hoàn thành', icon: 'bi-bag-check-fill', color: 'success' },
+                      { title: 'Tổng doanh thu', val: stats.revenue?.toLocaleString('vi-VN') + 'đ', sub: 'Toàn thời gian', icon: 'bi-currency-dollar', color: 'warning' },
+                      { title: 'Lợi nhuận ước tính', val: stats.profit?.toLocaleString('vi-VN') + 'đ', sub: '~30% doanh thu', icon: 'bi-graph-up-arrow', color: 'danger' },
+                    ].map((card, i) => (
+                      <div key={i} className="col-12 col-sm-6 col-xl-3">
+                        <div className={`card border-0 shadow-sm h-100 border-start border-4 border-${card.color}`}>
+                          <div className="card-body">
+                            <div className="d-flex align-items-center justify-content-between mb-2">
+                              <h6 className="text-muted mb-0">{card.title}</h6>
+                              <div className={`bg-${card.color} bg-opacity-10 p-2 rounded`}>
+                                <i className={`bi ${card.icon} text-${card.color} fs-4`}></i>
+                              </div>
+                            </div>
+                            <h4 className="fw-bold mb-1">{card.val}</h4>
+                            <small className="text-muted">{card.sub}</small>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
 
-                {/* THỐNG KÊ NHANH */}
-                <div className="row g-4 mb-5">
-                  {[
-                    { label: 'Tổng người dùng', value: stats.totalUsers?.toLocaleString(), icon: 'bi-people', color: 'primary' },
-                    { label: 'Người dùng mới', value: `+${stats.newUsers}`, icon: 'bi-person-plus', color: 'success' },
-                    { label: 'Tổng đơn hàng', value: stats.totalOrders, icon: 'bi-cart-check', color: 'info' },
-                    { label: 'Doanh thu', value: `${(stats.revenue / 1000000).toFixed(1)}tr`, icon: 'bi-currency-dollar', color: 'danger' },
-                    { label: 'Lợi nhuận', value: `${(stats.profit / 1000000).toFixed(1)}tr`, icon: 'bi-graph-up', color: 'warning' },
-                  ].map((item, i) => (
-                    <div key={i} className="col-md-2-4">
+                {/* --- PHẦN 2: BẢNG ĐIỀU KHIỂN NÂNG CAO --- */}
+                <div className="mb-4">
+                  <div className="d-flex flex-wrap justify-content-between align-items-center mb-3">
+                    <h4 className="text-dark fw-bold mb-0"><i className="bi bi-bar-chart-line-fill me-2"></i>Phân tích chi tiết</h4>
+                    
+                    <div className="d-flex gap-2 bg-white p-2 rounded shadow-sm">
+                      <select className="form-select form-select-sm border-0 bg-light fw-bold" 
+                        value={timeRange} onChange={(e) => setTimeRange(e.target.value)} style={{width: '120px'}}>
+                        <option value="year">Theo Năm</option>
+                        <option value="quarter">Theo Quý</option>
+                        <option value="month">Theo Tháng</option>
+                        <option value="week">Theo Tuần</option>
+                        <option value="custom">Tùy chỉnh</option>
+                      </select>
+                      {timeRange === 'custom' && (
+                        <>
+                          <input type="date" className="form-control form-control-sm" value={customStart} onChange={e => setCustomStart(e.target.value)} />
+                          <span className="align-self-center">-</span>
+                          <input type="date" className="form-control form-control-sm" value={customEnd} onChange={e => setCustomEnd(e.target.value)} />
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* BIỂU ĐỒ */}
+                  <div className="row g-4">
+                    <div className="col-lg-8">
                       <div className="card border-0 shadow-sm h-100">
-                        <div className="card-body d-flex justify-content-between align-items-center">
-                          <div>
-                            <h6 className="text-muted small">{item.label}</h6>
-                            <h4 className={`text-${item.color} fw-bold`}>{item.value}</h4>
-                          </div>
-                          <i className={`bi ${item.icon} fs-1 text-${item.color} opacity-25`}></i>
+                        <div className="card-header bg-white py-3">
+                          <h6 className="mb-0 fw-bold">Biểu đồ tăng trưởng</h6>
                         </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* BIỂU ĐỒ DOANH THU & LỢI NHUẬN */}
-                <div className="row g-4">
-                  <div className="col-lg-8">
-                    <div className="card border-0 shadow-sm">
-                      <div className="card-header bg-white">
-                        <h5 className="mb-0">Doanh thu & Lợi nhuận</h5>
-                      </div>
-                      <div className="card-body">
-                        <ResponsiveContainer width="100%" height={320}>
-                          <LineChart data={revenueData}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="period" />
-                            <YAxis />
-                            <Tooltip formatter={(v) => `${(v / 1000000).toFixed(1)}tr`} />
-                            <Legend />
-                            <Line type="monotone" dataKey="revenue" stroke="#007bff" name="Doanh thu" strokeWidth={2} />
-                            <Line type="monotone" dataKey="profit" stroke="#28a745" name="Lợi nhuận" strokeWidth={2} />
-                          </LineChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="col-lg-4">
-                    <div className="card border-0 shadow-sm h-100">
-                      <div className="card-header bg-white">
-                        <h5 className="mb-0">Phân loại sản phẩm</h5>
-                      </div>
-                      <div className="card-body">
-                        <ResponsiveContainer width="100%" height={320}>
-                          <PieChart>
-                            <Pie
-                              data={pieData}
-                              cx="50%"
-                              cy="50%"
-                              labelLine={false}
-                              label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                              outerRadius={90}
-                              fill="#8884d8"
-                              dataKey="value"
-                            >
-                              {pieData.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={entry.color} />
-                              ))}
-                            </Pie>
-                            <Tooltip />
-                          </PieChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* TOP SẢN PHẨM */}
-                <div className="card border-0 shadow-sm mt-4">
-                  <div className="card-header bg-white">
-                    <h5 className="mb-0">Top 5 sản phẩm bán chạy</h5>
-                  </div>
-                  <div className="card-body">
-                    <div className="row">
-                      {topProducts.map((p, i) => (
-                        <div key={i} className="col-md-2-4 mb-3">
-                          <div className="d-flex align-items-center p-3 bg-light rounded">
-                            <div
-                              className="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-3"
-                              style={{ width: '40px', height: '40px', fontSize: '1.1rem' }}
-                            >
-                              {i + 1}
-                            </div>
-                            <div className="flex-grow-1">
-                              <h6 className="mb-1 text-truncate" style={{ maxWidth: '180px' }}>{p.name}</h6>
-                              <small className="text-success fw-bold">{p.sales} đơn</small>
-                            </div>
+                        <div className="card-body">
+                          <div style={{ width: '100%', height: 350, minWidth: 250, minHeight: 100 }}>
+                            <ResponsiveContainer>
+                              <ComposedChart data={chartData} margin={{ top: 20, right: 20, bottom: 20, left: 0 }}>
+                                <CartesianGrid stroke="#f5f5f5" strokeDasharray="3 3" />
+                                <XAxis dataKey="name" scale="point" padding={{ left: 30, right: 30 }} />
+                                <YAxis yAxisId="left" tickFormatter={formatCurrency} orientation="left" stroke="#8884d8" />
+                                <YAxis yAxisId="right" orientation="right" stroke="#ff7300" />
+                                <Tooltip formatter={(value, name) => [value.toLocaleString(), name === 'orders' ? 'Đơn hàng' : (name === 'revenue' ? 'Doanh thu' : 'Lợi nhuận')]} />
+                                <Legend />
+                                <Area yAxisId="left" type="monotone" dataKey="revenue" name="Doanh thu" fill="#0d6efd" stroke="#0d6efd" fillOpacity={0.1} />
+                                <Bar yAxisId="left" dataKey="profit" name="Lợi nhuận" barSize={20} fill="#198754" />
+                                <Line yAxisId="right" type="monotone" dataKey="orders" name="Đơn hàng" stroke="#ffc107" strokeWidth={3} dot={{r: 4}} />
+                              </ComposedChart>
+                            </ResponsiveContainer>
                           </div>
                         </div>
-                      ))}
+                      </div>
+                    </div>
+
+                    <div className="col-lg-4">
+                      <div className="card border-0 shadow-sm h-100">
+                        <div className="card-header bg-white py-3">
+                          <h6 className="mb-0 fw-bold">Tỷ trọng danh mục</h6>
+                        </div>
+                        <div className="card-body d-flex flex-column justify-content-center align-items-center">
+                          <div style={{ width: '100%', height: 250, minWidth: 250, minHeight: 100 }}>
+                            <ResponsiveContainer>
+                              <PieChart>
+                                <Pie
+                                  data={pieData}
+                                  cx="50%"
+                                  cy="50%"
+                                  innerRadius={60}
+                                  outerRadius={80}
+                                  paddingAngle={5}
+                                  dataKey="value"
+                                >
+                                  {pieData.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={['#0d6efd', '#198754', '#ffc107', '#dc3545'][index % 4]} />
+                                  ))}
+                                </Pie>
+                                <Tooltip />
+                                <Legend verticalAlign="bottom" height={36}/>
+                              </PieChart>
+                            </ResponsiveContainer>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
+
+                  {/* TOP SẢN PHẨM */}
+                  <div className="row mt-4">
+                    <div className="col-12">
+                      <div className="card border-0 shadow-sm">
+                        <div className="card-header bg-white py-3">
+                          <h6 className="mb-0 fw-bold">Top 5 Sản phẩm bán chạy nhất</h6>
+                        </div>
+                        <div className="card-body">
+                          <div style={{ width: '100%', height: 300, minWidth: 250, minHeight: 100 }}>
+                            <ResponsiveContainer>
+                              <BarChart
+                                layout="vertical"
+                                data={topProducts}
+                                margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                              >
+                                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                                <XAxis type="number" />
+                                <YAxis dataKey="name" type="category" width={150} tick={{fontSize: 12}} />
+                                <Tooltip />
+                                <Legend />
+                                <Bar dataKey="sales" name="Số lượng đã bán" fill="#0dcaf0" barSize={20} radius={[0, 10, 10, 0]} />
+                              </BarChart>
+                            </ResponsiveContainer>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                 </div>
               </div>
             } />
 
-            {/* CÁC TRANG CON */}
-            {/* Quản lý sản phẩm */}
+            {/* ROUTES CON */}
             <Route path="products/*" element={<AdminProducts />} />
-            {/* Quản lý người dùng */}  
             <Route path="users" element={<Users />} />
-            {/* Quản lý đơn hàng */}
             <Route path="orders" element={<Orders />} />
-            {/* Quản lý mã giảm giá */}
             <Route path="coupons" element={<Coupons />} />
           </Routes>
-        </div>
         </div>
       </div>
     </div>

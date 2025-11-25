@@ -194,11 +194,7 @@ const Checkout = () => {
         })),
         shippingAddress,
         paymentMethod: payment,
-<<<<<<< HEAD
-        couponCode: coupon || undefined, // Giữ nguyên, backend sẽ bỏ nếu undefined
-=======
         couponCode: coupon || undefined,
->>>>>>> nhanh-tam
         loyaltyPointsUsed: usePoints ? pointsToUse : 0
       };
 
