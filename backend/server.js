@@ -20,6 +20,7 @@ const categoryRoutes = require('./routes/categories');
 const brandRoutes = require('./routes/brands');
 const userRoutes = require('./routes/userRoutes');
 const uploadRoutes = require('./routes/upload');
+const aiRoutes = require('./routes/aiRoutes');
 
 // Models
 const User = require('./models/User');
@@ -74,6 +75,7 @@ app.use('/api/brands', brandRoutes);
 app.use('/api/', userRoutes); // Lưu ý: /api/profile nằm trong userRoutes nên dùng path /api/
 app.use('/api/upload', uploadRoutes);
 app.use('/uploads', express.static(path.join(__dirname, '/uploads')));
+app.use('/api/ai', aiRoutes);
 
 // Socket.io Events
 io.on('connection', (socket) => {
