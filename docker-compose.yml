@@ -1,45 +1,71 @@
+# docker-compose.yml
 services:
-  # Dịch vụ Cơ sở dữ liệu
   mongo:
-    image: mongo:latest # Sử dụng image mongo chính thức
+    image: mongo:latest
+    restart: unless-stopped
     ports:
-      - "27017:27017" # Mở cổng 27017 để kết nối từ máy thật (tùy chọn)
-
-  # Dịch vụ Backend
-  backend:
-    build:
-      context: . # Xây dựng từ thư mục gốc
-      dockerfile: Dockerfile.backend # Sử dụng Dockerfile cho backend
-    ports:
-      - "5000:5000" # Ánh xạ cổng 5000 của máy thật vào cổng 5000 của container
-    env_file: backend/.env # Tự động nạp các biến môi trường
-    depends_on:
-      - mongo # Đảm bảo backend chỉ khởi động SAU KHI mongo đã khởi động
+      - "27017:27017"
     volumes:
-      # Ánh xạ code từ máy thật vào container (chế độ development)
-      - ./backend:/app/backend
-      # Bỏ qua node_modules trên máy thật, dùng node_modules của container
-      - /app/backend/node_modules
+      - mongo_data:/data/db
 
-  # Dịch vụ Frontend
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.10
+    container_name: pcshop_es
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false     # Tắt bảo mật (login/password) cho dev
+      - xpack.ml.enabled=false           # QUAN TRỌNG: Tắt Machine Learning (ăn RAM nhất)
+      - xpack.watcher.enabled=false      # Tắt tính năng theo dõi/alert
+      - xpack.monitoring.enabled=false   # Tắt thu thập logs monitoring
+      - xpack.graph.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ulimits:
+      memlock: -1
+    ports:
+      - "9200:9200"
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+
+  backend:
+    build: 
+      context: ./backend
+      dockerfile: ../Dockerfile.backend
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    env_file:
+      - ./backend/.env
+    environment:
+      - ELASTICSEARCH_HOST=http://elasticsearch:9200
+    depends_on:
+      - mongo
+      - elasticsearch
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+
   frontend:
     build:
-      context: . # Xây dựng từ thư mục gốc
-      dockerfile: Dockerfile.frontend # Sử dụng Dockerfile cho frontend
+      context: ./frontend
+      dockerfile: ../Dockerfile.frontend
     ports:
-      - "3000:3000" # Ánh xạ cổng 3000 của máy thật vào cổng 3000 của container
+      - "3000:3000"
     depends_on:
-      - backend # Đảm bảo frontend chỉ khởi động SAU KHI backend đã khởi động
-    # --- Bổ sung cho chế độ development ---
-    environment:
-      # Ép sử dụng "polling" để "hot reload" hoạt động trong Docker trên Windows/Mac
-      - CHOKIDAR_USEPOLLING=true
+      - backend
     volumes:
-      # Ánh xạ code từ máy thật vào container (chế độ development)
-      - ./frontend:/app/frontend
-      # Bỏ qua node_modules trên máy thật, dùng node_modules của container
-      - /app/frontend/node_modules
-    # Ghi đè lệnh CMD (vốn là `npx serve -s build`)
-    # để chạy server phát triển (ví dụ: React, Vue)
-    command: npm start
-    # --- Hết phần bổ sung ---
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - HOST=0.0.0.0
+      - WATCHPACK_POLLING=true
+      - WDS_SOCKET_PORT=3000
+      - WDS_SOCKET_HOST=localhost
+      - NODE_OPTIONS=--max-old-space-size=8192
+    stdin_open: true
+    tty: true
+
+# Định nghĩa volume để không mất dữ liệu khi restart
+volumes:
+  mongo_data:
+  esdata:

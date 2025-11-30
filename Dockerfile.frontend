@@ -1,8 +1,13 @@
 # Dockerfile.frontend
-FROM node:18
-WORKDIR /app/frontend
-COPY frontend/package*.json ./
+FROM node:20-alpine
+
+# Đúng với volumes: - ./frontend:/app
+WORKDIR /app
+
+COPY package*.json ./
 RUN npm install
-COPY frontend ./
-RUN npm run build
-CMD ["npx", "serve", "-s", "build"]
+
+COPY . .
+
+# Development: hot reload
+CMD ["npm", "start"]

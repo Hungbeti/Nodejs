@@ -5,12 +5,16 @@ const Product = require('../models/Product');
 const Category = require('../models/Category');
 const Brand = require('../models/Brand');
 const { protect, admin } = require('../middleware/auth');
+const productController = require('../controllers/productController');
 
 // Helper: Tính tổng tồn kho từ variants
 const calculateTotalStock = (variants) => {
   if (!variants) return 0;
   return variants.reduce((acc, curr) => acc + Number(curr.stock), 0);
 };
+
+// GET Tìm kiếm (công khai)
+router.get('/search', productController.searchProducts);
 
 // GET tất cả sản phẩm
 router.get('/', async (req, res) => {

@@ -74,3 +74,6 @@ This section has moved here: [https://facebook.github.io/create-react-app/docs/t
 ### npm install socket.io BE
 ### npm install socket.io-client FE
 ### npm install multer BE
+### npm install sentiment BE FE
+### npm install @google/generative-ai BE
+### https://platform.openai.com/api-keys Lấy api key cho chat bot

@@ -21,6 +21,7 @@ import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import Chatbot from './components/Chatbot';
 
 function App() {
   return (
@@ -60,6 +61,7 @@ function App() {
             <Route path="/google-success" element={<GoogleAuthSuccess />} />
             <Route path="/change-password-first" element={<ChangePasswordFirst />} />
           </Routes>
+          <Chatbot />
         </div>
       </Router>
     </CartProvider>

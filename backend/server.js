@@ -8,6 +8,7 @@ const { Server } = require('socket.io');
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const path = require('path');
+const { exec } = require('child_process');
 
 // Routes Imports
 const authRoutes = require('./routes/auth');
@@ -20,6 +21,7 @@ const categoryRoutes = require('./routes/categories');
 const brandRoutes = require('./routes/brands');
 const userRoutes = require('./routes/userRoutes');
 const uploadRoutes = require('./routes/upload');
+const aiRoutes = require('./routes/aiRoutes');
 
 // Models
 const User = require('./models/User');
@@ -27,17 +29,23 @@ const User = require('./models/User');
 connectDB();
 
 const app = express();
-const server = http.createServer(app); // Tạo server HTTP sớm
+app.use(cors({
+  origin: ["http://localhost:3000"], 
+  credentials: true
+}));
+
+const server = http.createServer(app);
 
 // Cấu hình Socket.io
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:3000",
-    methods: ["GET", "POST"]
+    origin: ["http://localhost:3000"],
+    methods: ["GET", "POST"],
+    credentials: true
   }
 });
 
-app.use(cors({ origin: 'http://localhost:3000' }));
+// app.use(cors({ origin: 'http://localhost:3000' }));
 app.use(express.json());
 app.use(passport.initialize());
 
@@ -74,6 +82,7 @@ app.use('/api/brands', brandRoutes);
 app.use('/api/', userRoutes); // Lưu ý: /api/profile nằm trong userRoutes nên dùng path /api/
 app.use('/api/upload', uploadRoutes);
 app.use('/uploads', express.static(path.join(__dirname, '/uploads')));
+app.use('/api/ai', aiRoutes);
 
 // Socket.io Events
 io.on('connection', (socket) => {
@@ -90,4 +99,24 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+
+  // --- THÊM ĐOẠN NÀY ĐỂ SYNC DỮ LIỆU TỰ ĐỘNG ---
+  console.log('🔄 Server đã chạy. Đang kích hoạt tiến trình đồng bộ ES trong nền...');
+  
+  // Chạy file sync-es.js như một tiến trình con
+  const syncProcess = exec('node sync-es.js');
+  
+  syncProcess.stdout.on('data', (data) => {
+    console.log(`[Sync-ES]: ${data.trim()}`);
+  });
+
+  syncProcess.stderr.on('data', (data) => {
+    // Không cần in lỗi kết nối ban đầu vì ES đang khởi động
+    if (!data.includes('ECONNREFUSED')) {
+      console.error(`[Sync-ES Error]: ${data}`);
+    }
+  });
+  // ---------------------------------------------
+});
