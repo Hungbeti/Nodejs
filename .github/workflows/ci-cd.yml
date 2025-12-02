@@ -1,0 +1,57 @@
+name: PC Shop CI Pipeline
+
+# Kích hoạt khi có code push lên nhánh main hoặc master
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  # --- JOB 1: KIỂM TRA BACKEND ---
+  build-backend:
+    runs-on: ubuntu-latest # Chạy trên máy ảo Linux
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3 # Tải code từ repo về máy ảo
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18' # Chọn version Node.js
+        
+    - name: Install Backend Dependencies
+      run: |
+        cd backend
+        npm install
+    
+    # Nếu bạn có viết test case thì bỏ comment dòng dưới
+    # - name: Run Backend Tests
+    #   run: |
+    #     cd backend
+    #     npm test
+
+  # --- JOB 2: KIỂM TRA FRONTEND ---
+  # --- JOB 2: KIỂM TRA FRONTEND ---
+  build-frontend:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+
+    - name: Install Frontend Dependencies
+      run: |
+        cd frontend
+        npm install --legacy-peer-deps 
+
+    - name: Build Frontend React
+      run: |
+        cd frontend
+        CI=false npm run build
