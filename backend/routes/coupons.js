@@ -12,6 +12,10 @@ const {
 const { protect, admin } = require('../middleware/auth');
 
 // PUBLIC
+<<<<<<< HEAD
+=======
+// Dùng POST thay vì GET để gửi kèm orderTotal một cách an toàn và chuẩn hơn
+>>>>>>> 1b0597093518f1fd9e0f005b48ab1c6559cf8a6b
 router.get('/available', getAvailableCoupons);
 router.post('/validate', validateCoupon); 
 

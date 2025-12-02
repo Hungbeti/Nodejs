@@ -1,6 +1,11 @@
 // backend/controllers/cartController.js
 const Cart = require('../models/Cart');
 const Product = require('../models/Product');
+<<<<<<< HEAD
+=======
+// const User = require('../models/User');
+// const jwt = require('jsonwebtoken');
+>>>>>>> 1b0597093518f1fd9e0f005b48ab1c6559cf8a6b
 
 // GET: Lấy giỏ hàng
 exports.getCart = async (req, res) => {

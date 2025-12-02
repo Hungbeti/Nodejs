@@ -1,7 +1,10 @@
 // backend/controllers/couponController.js
 const Coupon = require('../models/Coupon');
 const Order = require('../models/Order');
+<<<<<<< HEAD
 const Product = require('../models/Product');
+=======
+>>>>>>> 1b0597093518f1fd9e0f005b48ab1c6559cf8a6b
 
 // === ADMIN ONLY ===
 
@@ -74,9 +77,15 @@ const getAvailableCoupons = async (req, res) => {
     res.status(500).json({ msg: 'Lỗi server' });
   }
 };
+<<<<<<< HEAD
 
 // POST: Kiểm tra mã giảm giá
 const validateCoupon = async (req, res) => {
+=======
+// POST: Kiểm tra mã giảm giá (Cần biết tổng tiền để check điều kiện)
+const validateCoupon = async (req, res) => {
+  // Cần nhận thêm 'cartItems' để kiểm tra danh mục sản phẩm
+>>>>>>> 1b0597093518f1fd9e0f005b48ab1c6559cf8a6b
   const { code, orderTotal, cartItems } = req.body;
 
   try {
@@ -86,6 +95,7 @@ const validateCoupon = async (req, res) => {
     if (coupon.uses >= coupon.maxUses) return res.status(400).json({ valid: false, msg: 'Mã hết lượt dùng' });
     if (orderTotal < coupon.minOrderValue) return res.status(400).json({ valid: false, msg: `Đơn tối thiểu ${coupon.minOrderValue.toLocaleString()}đ` });
 
+<<<<<<< HEAD
     // --- SỬA LOGIC KIỂM TRA DANH MỤC (Backend tự tra cứu DB) ---
     let applicableTotal = orderTotal; 
 
@@ -112,6 +122,18 @@ const validateCoupon = async (req, res) => {
         const realCategoryId = productCategoryMap[item.product]; // Lấy category từ DB Map
         return realCategoryId && validCategoryIds.includes(realCategoryId);
       });
+=======
+    // --- LOGIC MỚI: KIỂM TRA DANH MỤC ---
+    let applicableTotal = orderTotal; // Mặc định là tổng đơn
+
+    // Nếu mã chỉ áp dụng cho một số danh mục cụ thể
+    if (coupon.applicableCategories && coupon.applicableCategories.length > 0) {
+      // Lọc ra các sản phẩm thuộc danh mục được áp dụng
+      const applicableItems = cartItems.filter(item => 
+        // Giả sử item.product.category là ID danh mục
+        coupon.applicableCategories.includes(item.product.category)
+      );
+>>>>>>> 1b0597093518f1fd9e0f005b48ab1c6559cf8a6b
 
       if (applicableItems.length === 0) {
         return res.status(400).json({ 
@@ -120,6 +142,7 @@ const validateCoupon = async (req, res) => {
         });
       }
 
+<<<<<<< HEAD
       // 5. Tính tổng tiền của CHỈ các sản phẩm được áp dụng
       // Dùng giá từ Frontend gửi lên (vì có thể là giá biến thể)
       applicableTotal = applicableItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
@@ -127,15 +150,27 @@ const validateCoupon = async (req, res) => {
     // -----------------------------------------------------------
 
     // Tính toán tiền giảm
+=======
+      // Tính tổng tiền của CHỈ các sản phẩm được áp dụng
+      applicableTotal = applicableItems.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
+    }
+    // ------------------------------------
+
+    // Tính toán tiền giảm dựa trên 'applicableTotal'
+>>>>>>> 1b0597093518f1fd9e0f005b48ab1c6559cf8a6b
     let discountAmount = 0;
     if (coupon.type === 'percent') {
       discountAmount = Math.floor(applicableTotal * (coupon.value / 100));
     } else {
       discountAmount = coupon.value;
     }
+<<<<<<< HEAD
     
     // Đảm bảo không giảm quá số tiền của các sản phẩm hợp lệ
     discountAmount = Math.min(discountAmount, applicableTotal); 
+=======
+    discountAmount = Math.min(discountAmount, applicableTotal); // Không giảm quá tổng tiền áp dụng
+>>>>>>> 1b0597093518f1fd9e0f005b48ab1c6559cf8a6b
 
     res.json({
       valid: true,
@@ -145,7 +180,11 @@ const validateCoupon = async (req, res) => {
     });
 
   } catch (err) {
+<<<<<<< HEAD
     console.error("Lỗi validate coupon:", err);
+=======
+    console.error(err);
+>>>>>>> 1b0597093518f1fd9e0f005b48ab1c6559cf8a6b
     res.status(500).json({ msg: 'Lỗi kiểm tra mã' });
   }
 };

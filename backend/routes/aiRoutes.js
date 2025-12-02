@@ -12,6 +12,7 @@ router.post('/chat', async (req, res) => {
   try {
     const products = await Product.find()
       .limit(20)
+<<<<<<< HEAD
       .select('name price category brand variants description stock');
 
     const productList = products.map(p => {
@@ -31,6 +32,13 @@ router.post('/chat', async (req, res) => {
       
       return info;
     }).join('\n\n');
+=======
+      .select('name price category brand variants description');
+
+    const productList = products.map(p => 
+      `${p.name} - ${p.price.toLocaleString()}đ ${p.variants?.length > 0 ? `(có ${p.variants.length} phiên bản)` : ''}`
+    ).join('\n');
+>>>>>>> 1b0597093518f1fd9e0f005b48ab1c6559cf8a6b
 
     // FIX: Dùng model Gemini 2.5 Flash (hiện tại, hỗ trợ tốt 2025)
     const model = genAI.getGenerativeModel({ 
@@ -55,7 +63,11 @@ Hãy trả lời ngắn gọn, tự nhiên, dùng emoji, và gợi ý sản ph�
   } catch (error) {
     console.error("Lỗi Gemini AI:", error.message);
     res.status(500).json({ 
+<<<<<<< HEAD
       reply: 'Hệ thống đang quá tải một chút, bạn thử lại sau 30s nhé! 😊' 
+=======
+      reply: 'Xin lỗi bạn, mình đang hơi mệt. Bạn thử lại sau 30s nhé! 😊' 
+>>>>>>> 1b0597093518f1fd9e0f005b48ab1c6559cf8a6b
     });
   }
 });

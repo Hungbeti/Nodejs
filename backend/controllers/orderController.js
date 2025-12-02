@@ -3,6 +3,7 @@ const Order = require('../models/Order');
 const User = require('../models/User');
 const Coupon = require('../models/Coupon');
 const sendEmail = require('../utils/email');
+<<<<<<< HEAD
 const Product = require('../models/Product');
 
 // Tạo đơn hàng (hỗ trợ guest)
@@ -32,10 +33,25 @@ const createOrder = async (req, res) => {
           }],
           password: Math.random().toString(36).slice(-8) 
         });
+=======
+
+// Tạo đơn hàng (hỗ trợ guest)
+const createOrder = async (req, res) => {
+  const { products, total, email, name, address, couponCode } = req.body;
+
+  try {
+    // Tìm hoặc tạo user (guest)
+    let user = req.user;
+    if (!user) {
+      user = await User.findOne({ email });
+      if (!user) {
+        user = new User({ email, name, addresses: [address] });
+>>>>>>> 1b0597093518f1fd9e0f005b48ab1c6559cf8a6b
         await user.save();
       }
     }
 
+<<<<<<< HEAD
     const subtotal = items.reduce((acc, item) => acc + (item.price * item.quantity), 0);
     const shippingFee = 30000;
     const tax = subtotal * 0.1;
@@ -114,6 +130,32 @@ const createOrder = async (req, res) => {
       total: finalTotal,
     });
 
+=======
+    // Xử lý mã giảm giá
+    let discount = 0;
+    let appliedCoupon = null;
+    if (couponCode) {
+      const coupon = await Coupon.findOne({ code: couponCode });
+      if (coupon && coupon.uses < coupon.maxUses) {
+        discount = coupon.discount || 0;
+        appliedCoupon = coupon;
+        coupon.uses += 1;
+        await coupon.save();
+      }
+    }
+
+    // Tạo đơn hàng
+    const newOrder = new Order({
+      user: user._id,
+      products: products.map(p => ({
+        product: p.product,
+        quantity: p.quantity,
+        variant: p.variant
+      })),
+      total: total - discount,
+      coupon: appliedCoupon?._id
+    });
+>>>>>>> 1b0597093518f1fd9e0f005b48ab1c6559cf8a6b
     newOrder.statusHistory.push({ status: 'pending' });
     await newOrder.save();
 

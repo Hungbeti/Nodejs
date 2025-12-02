@@ -36,6 +36,7 @@ const upload = multer({
 });
 
 // Route upload (cho phép upload nhiều file, tối đa 5)
+<<<<<<< HEAD
 router.post('/', upload.array('images'), (req, res) => {
   // Sửa đoạn map đường dẫn
   const filePaths = req.files.map(file => {
@@ -57,6 +58,11 @@ router.post('/', upload.array('images'), (req, res) => {
     return cleanPath;
   });
 
+=======
+router.post('/', upload.array('images', 5), (req, res) => {
+  // Trả về đường dẫn của các file đã upload
+  const filePaths = req.files.map(file => `/uploads/${file.filename}`);
+>>>>>>> 1b0597093518f1fd9e0f005b48ab1c6559cf8a6b
   res.send(filePaths);
 });
 

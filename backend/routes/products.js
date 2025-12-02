@@ -66,6 +66,7 @@ router.get('/', async (req, res) => {
     }
 
     if (minPrice || maxPrice) {
+<<<<<<< HEAD
       query.variants = {
         $elemMatch: {
           price: {}
@@ -73,6 +74,11 @@ router.get('/', async (req, res) => {
       };
       if (minPrice) query.variants.$elemMatch.price.$gte = Number(minPrice);
       if (maxPrice) query.variants.$elemMatch.price.$lte = Number(maxPrice);
+=======
+      query.price = {};
+      if (minPrice) query.price.$gte = Number(minPrice);
+      if (maxPrice) query.price.$lte = Number(maxPrice);
+>>>>>>> 1b0597093518f1fd9e0f005b48ab1c6559cf8a6b
     }
 
     const sortOption = {
