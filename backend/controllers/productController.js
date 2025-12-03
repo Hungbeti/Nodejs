@@ -1,6 +1,5 @@
 // backend/controllers/productController.js
 const Product = require('../models/Product');
-<<<<<<< HEAD
 
 const searchProducts = async (req, res) => {
   const { keyword } = req.query;
@@ -24,54 +23,6 @@ const searchProducts = async (req, res) => {
 };
 
 // Hàm GET danh sách sản phẩm
-=======
-const esClient = require('../config/elasticsearch');
-const { indexProduct, removeProduct, INDEX_NAME } = require('../utils/esSync');
-
-// === HÀM TÌM KIẾM BẰNG ELASTICSEARCH (ĐIỂM THƯỞNG) ===
-const searchProducts = async (req, res) => {
-  const { keyword } = req.query;
-
-  if (!keyword) return res.json([]);
-
-  try {
-    const result = await esClient.search({
-      index: INDEX_NAME,
-      body: {
-        query: {
-          multi_match: {
-            query: keyword,
-            fields: ['name^3', 'description', 'brand', 'category'], 
-            fuzziness: 'AUTO' // Chấp nhận sai chính tả
-          }
-        }
-      }
-    });
-
-    const hits = result.body.hits.hits.map(hit => ({
-      _id: hit._id,
-      name: hit._source.name,
-      price: hit._source.price,
-      images: [hit._source.image], 
-      description: hit._source.description,
-    }));
-
-    res.json({ products: hits, totalPages: 1, currentPage: 1 });
-  } catch (err) {
-    console.error(err);
-    // Fallback về MongoDB nếu ES lỗi
-    const fallbackResults = await Product.find({
-      $or: [
-        { name: { $regex: keyword, $options: 'i' } },
-        { description: { $regex: keyword, $options: 'i' } }
-      ]
-    }).limit(10);
-    res.json({ products: fallbackResults, totalPages: 1, currentPage: 1 });
-  }
-};
-
-// Hàm GET danh sách sản phẩm (phải export!)
->>>>>>> 1b0597093518f1fd9e0f005b48ab1c6559cf8a6b
 const getProducts = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
@@ -107,12 +58,6 @@ const createProduct = async (req, res) => {
   try {
     const newProduct = new Product(req.body);
     const savedProduct = await newProduct.save();
-<<<<<<< HEAD
-=======
-    
-    // Sync sang ElasticSearch
-    await indexProduct(savedProduct); 
->>>>>>> 1b0597093518f1fd9e0f005b48ab1c6559cf8a6b
 
     res.status(201).json(savedProduct);
   } catch (err) {
@@ -126,16 +71,7 @@ const updateProduct = async (req, res) => {
       req.params.id,
       req.body,
       { new: true }
-<<<<<<< HEAD
     ).populate('category').populate('brand');
-=======
-    ).populate('category').populate('brand'); // Populate để lấy tên sync sang ES
-
-    if (updatedProduct) {
-      // Sync sang ElasticSearch
-      await indexProduct(updatedProduct);
-    }
->>>>>>> 1b0597093518f1fd9e0f005b48ab1c6559cf8a6b
 
     res.json(updatedProduct);
   } catch (err) {
@@ -146,12 +82,6 @@ const updateProduct = async (req, res) => {
 const deleteProduct = async (req, res) => {
   try {
     await Product.findByIdAndDelete(req.params.id);
-<<<<<<< HEAD
-=======
-    
-    // Xóa khỏi ElasticSearch
-    await removeProduct(req.params.id);
->>>>>>> 1b0597093518f1fd9e0f005b48ab1c6559cf8a6b
 
     res.json({ message: 'Product deleted' });
   } catch (err) {
@@ -169,17 +99,9 @@ const getProductById = async (req, res) => {
     }
 }
 
-<<<<<<< HEAD
 const addComment = (req, res) => res.json({ message: 'Comment added' });
 const addRating = (req, res) => res.json({ message: 'Rating added' });
 
-=======
-// ... (các hàm addComment, addRating giữ nguyên hoặc viết thêm)
-const addComment = (req, res) => res.json({ message: 'Comment added' });
-const addRating = (req, res) => res.json({ message: 'Rating added' });
-
-// XUẤT ĐÚNG TÊN
->>>>>>> 1b0597093518f1fd9e0f005b48ab1c6559cf8a6b
 module.exports = {
   getProducts,
   getProductById,

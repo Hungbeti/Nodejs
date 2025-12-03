@@ -287,7 +287,6 @@ router.post('/', async (req, res) => {
 
     for (const item of cartItems) {
       const product = await Product.findById(item.product);
-<<<<<<< HEAD
       
       // Kiểm tra sản phẩm tồn tại
       if (!product) {
@@ -319,33 +318,10 @@ router.post('/', async (req, res) => {
         return res.status(400).json({ msg: `Sản phẩm "${product.name}" không đủ hàng` });
       }
 
-=======
-      if (!product || product.stock < item.quantity) {
-        return res.status(400).json({ msg: `Sản phẩm "${product?.name || item.product}" không đủ hàng` });
-      }
-
-      let itemPrice = product.price;
-      let itemName = product.name;
-
-      if (item.variantId && product.variants) {
-          const variant = product.variants.id(item.variantId);
-          if (variant) {
-              itemPrice = variant.price;
-              // Tùy chọn: Có thể nối tên variant vào tên SP hoặc lưu riêng
-              // itemName = `${product.name} (${variant.name})`; 
-          }
-      } else if (item.price) {
-          // Fallback: nếu frontend gửi price đúng (đã validate ở bước khác), dùng tạm
-          // Nhưng tốt nhất là query DB như trên để bảo mật giá
-          itemPrice = item.price; 
-      }
-      
->>>>>>> 1b0597093518f1fd9e0f005b48ab1c6559cf8a6b
       subtotal += itemPrice * item.quantity;
       
       validatedItems.push({
         product: product._id,
-<<<<<<< HEAD
         name: itemName,
         image: product.images[0],
         price: itemPrice,
@@ -365,18 +341,6 @@ router.post('/', async (req, res) => {
       product.stock -= item.quantity;
       product.sold = (product.sold || 0) + item.quantity;
       
-=======
-        name: itemName, // Tên sản phẩm
-        image: product.images[0],
-        price: itemPrice, // GIÁ CỦA BIẾN THỂ (đã tính toán ở trên)
-        quantity: item.quantity,
-        variantName: item.variantName // LƯU TÊN BIẾN THỂ VÀO DB
-      });
-      
-      // === CẬP NHẬT TỒN KHO VÀ SỐ LƯỢNG ĐÃ BÁN ===
-      product.stock -= item.quantity;
-      product.sold = (product.sold || 0) + item.quantity;
->>>>>>> 1b0597093518f1fd9e0f005b48ab1c6559cf8a6b
       await product.save();
     }
 
@@ -388,17 +352,12 @@ router.post('/', async (req, res) => {
 
     // 5. ÁP DỤNG MÃ GIẢM GIÁ (Logic này cần được đồng bộ với /coupons/validate)
     if (couponCode) {
-<<<<<<< HEAD
       coupon = await Coupon.findOne({ code: couponCode.toUpperCase(), isActive: true });
       
-=======
-      coupon = await Coupon.findOne({ code: couponCode, isActive: true });
->>>>>>> 1b0597093518f1fd9e0f005b48ab1c6559cf8a6b
       if (coupon && coupon.uses < coupon.maxUses && subtotal >= coupon.minOrderValue) {
         
         // Kiểm tra logic danh mục
         let applicableTotal = subtotal;
-<<<<<<< HEAD
 
         if (coupon.applicableCategories && coupon.applicableCategories.length > 0) {
           
@@ -432,24 +391,6 @@ router.post('/', async (req, res) => {
             coupon = null; 
         }
 
-=======
-        if (coupon.applicableCategories && coupon.applicableCategories.length > 0) {
-          const applicableItems = validatedItems.filter(item => {
-            const product = cartItems.find(p => p.product.toString() === item.product.toString());
-            return product && coupon.applicableCategories.includes(product.category); // Giả định item có category
-          });
-          applicableTotal = applicableItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-        }
-
-        // Tính giảm giá
-        if (coupon.type === 'percent') {
-          discount = Math.floor(applicableTotal * (coupon.value / 100));
-        } else {
-          discount = coupon.value;
-        }
-        discount = Math.min(discount, applicableTotal);
-        total -= discount;
->>>>>>> 1b0597093518f1fd9e0f005b48ab1c6559cf8a6b
       } else {
          coupon = null;
       }
